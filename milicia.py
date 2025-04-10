@@ -3,6 +3,7 @@ from gtts import gTTS
 import playsound
 import tempfile
 import os
+from spotify_control import play_song, pause_song, resume_song, next_song
 
 recognizer = sr.Recognizer()
 
@@ -57,6 +58,32 @@ def run_command(command):
     elif "buka file explorer" in command or "buka folder" in command:
         os.system("explorer")
         speak("Membuka File Explorer")
+
+    elif "putar lagu" in command:
+        # Ganti URI dengan lagu favorit kamu dari Spotify
+        song_uri = "spotify:track:10nyNJ6zNy2YVYLrcwLccB"  # Contoh
+        if play_song(song_uri):
+            speak("Memutar lagu favorit kamu")
+        else:
+            speak("Maaf, gagal memutar lagu")
+
+    elif "pause lagu" in command:
+        if pause_song():
+            speak("Lagu dijeda")
+        else:
+            speak("Gagal menjeda lagu")
+
+    elif "lanjutkan lagu" in command or "resume lagu" in command:
+        if resume_song():
+            speak("Melanjutkan lagu")
+        else:
+            speak("Gagal melanjutkan lagu")
+
+    elif "next lagu" in command or "lagu berikutnya" in command:
+        if next_song():
+            speak("Lagu berikutnya diputar")
+        else:
+            speak("Gagal memutar lagu berikutnya")
 
     elif "keluar" in command or "exit" in command:
         speak("Sampai jumpa! Milicia pamit.")
