@@ -4,12 +4,17 @@ import playsound
 import tempfile
 import os
 import random
+import threading
+import tkinter as tk
+from tkinter import ttk
+from tkinter import scrolledtext
 from spotify_control import play_song, pause_song, resume_song, next_song, is_device_active
 
 recognizer = sr.Recognizer()
 
+# === GUI Functions ===
 def speak(text):
-    print(f"Milicia: {text}")
+    log_output(f"Milicia: {text}")
     tts = gTTS(text=text, lang='id')
     temp_path = os.path.join(tempfile.gettempdir(), "milicia_temp.mp3")
     tts.save(temp_path)
@@ -19,28 +24,33 @@ def speak(text):
 def speak_natural(options):
     speak(random.choice(options))
 
-def listen():
+def listen_and_process():
+    threading.Thread(target=handle_voice_input).start()
+
+def handle_voice_input():
     with sr.Microphone() as source:
-        print("🎙️ Mendengarkan...")
+        log_output("\n🎙️ Mendengarkan...")
         audio = recognizer.listen(source)
         try:
             command = recognizer.recognize_google(audio, language='id-ID')
-            print(f"🗣️ Kamu bilang: {command}")
-            return command.lower()
+            log_output(f"🗣️ Kamu bilang: {command}")
+            run_command(command.lower())
         except sr.UnknownValueError:
             speak_natural([
                 "Maaf, aku nggak menangkap itu.",
                 "Bisa diulangi lagi?",
                 "Sepertinya aku tidak mengerti."
             ])
-            return ""
         except sr.RequestError:
             speak("Gagal terhubung ke layanan suara.")
-            return ""
+
+def log_output(message):
+    output_area.insert(tk.END, f"{message}\n")
+    output_area.see(tk.END)
 
 def run_command(command):
     if "buka chrome" in command:
-        chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        chrome_path = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
         if os.path.exists(chrome_path):
             os.startfile(chrome_path)
             speak_natural([
@@ -52,7 +62,7 @@ def run_command(command):
             speak("Chrome tidak ditemukan.")
 
     elif "buka cmd" in command or "buka terminal" in command:
-        os.startfile(r"C:\Windows\System32\cmd.exe")
+        os.startfile(r"C:\\Windows\\System32\\cmd.exe")
         speak("Command Prompt dibuka.")
 
     elif "buka notepad" in command:
@@ -67,8 +77,6 @@ def run_command(command):
         if not is_device_active():
             speak("Kamu belum membuka Spotify. Silakan buka dan putar lagu sebentar dulu ya.")
             return
-
-        # GANTI KE PLAYLIST KAMU
         playlist_uri = "spotify:playlist:7mEK7dZsNKyunIBL5nOLZQ"
         if play_song(playlist_uri, is_playlist=True):
             speak_natural([
@@ -106,7 +114,7 @@ def run_command(command):
             "Oke, sampai ketemu lagi ya!",
             "Terima kasih, aku keluar dulu."
         ])
-        exit()
+        window.quit()
 
     else:
         speak_natural([
@@ -115,9 +123,25 @@ def run_command(command):
             "Perintah tidak dikenali."
         ])
 
-# 🔁 Loop utama
+# === GUI Setup ===
+window = tk.Tk()
+window.title("Milicia Assistant")
+window.geometry("600x450")
+window.configure(bg="#1e1e2f")
+
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TButton", font=("Segoe UI", 11), padding=10, background="#4CAF50", foreground="white")
+
+label = tk.Label(window, text="🟢 Milicia Siap Membantu", font=("Segoe UI", 16, "bold"), bg="#1e1e2f", fg="white")
+label.pack(pady=15)
+
+listen_button = ttk.Button(window, text="🎙️ Mulai Mendengarkan", command=listen_and_process)
+listen_button.pack(pady=10)
+
+output_area = scrolledtext.ScrolledText(window, wrap=tk.WORD, width=70, height=15, font=("Consolas", 10), bg="#2d2d3a", fg="white", insertbackground="white")
+output_area.pack(pady=10, padx=10)
+
 speak("Halo! Saya Milicia. Senang bisa membantu kamu hari ini.")
-while True:
-    cmd = listen()
-    if cmd:
-        run_command(cmd)
+
+window.mainloop()
