@@ -7,6 +7,7 @@ import random
 import threading
 import customtkinter as ctk
 import json
+import feedparser
 from spotify_control import play_song, pause_song, resume_song, next_song, is_device_active
 
 recognizer = sr.Recognizer()
@@ -68,6 +69,17 @@ def log_output(message):
     output_area.configure(state="disabled")
     output_area.see("end")
 
+def get_latest_news(jumlah=3):
+    url = "https://www.cnnindonesia.com/nasional/rss"
+    feed = feedparser.parse(url)
+    berita = []
+
+    for entry in feed.entries[:jumlah]:
+        title = entry.title.replace("&quot;", "\"").replace("&apos;", "'")
+        berita.append(title)
+
+    return berita
+
 def run_command(command):
     if "buka chrome" in command:
         chrome_path = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
@@ -107,6 +119,15 @@ def run_command(command):
     elif "buka file explorer" in command or "buka folder" in command:
         os.system("explorer")
         speak("File Explorer dibuka.")
+
+    elif "berita hari ini" in command:
+        speak("Berikut beberapa berita terkini dari CNN Indonesia.")
+        berita_list = get_latest_news()
+        if berita_list:
+            for berita in berita_list:
+                speak(berita)
+        else:
+            speak("Maaf, aku tidak menemukan berita terbaru saat ini.")
 
     elif "putar lagu" in command:
         if not is_device_active():
