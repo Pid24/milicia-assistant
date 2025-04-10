@@ -6,11 +6,29 @@ import os
 import random
 import threading
 import customtkinter as ctk
+import json
 from spotify_control import play_song, pause_song, resume_song, next_song, is_device_active
 
 recognizer = sr.Recognizer()
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+USER_DATA_FILE = "user_data.json"
+
+def get_user_name():
+    if os.path.exists(USER_DATA_FILE):
+        with open(USER_DATA_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("name", "pengguna")
+    else:
+        return "pengguna"
+
+def set_user_name(name):
+    with open(USER_DATA_FILE, "w") as f:
+        json.dump({"name": name}, f)
+
+# Set nama user sekali saja
+set_user_name("Rofid")
 
 # === GUI Functions ===
 def speak(text):
@@ -62,9 +80,9 @@ def run_command(command):
             ])
         else:
             speak("Chrome tidak ditemukan.")
-            
+
     elif "buka brave" in command:
-        brave_path = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+        brave_path = r"C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
         if os.path.exists(brave_path):
             os.startfile(brave_path)
             speak_natural([
@@ -145,7 +163,8 @@ window = ctk.CTk()
 window.title("Milicia Assistant")
 window.geometry("600x480")
 
-title_label = ctk.CTkLabel(window, text="🟢 Milicia Siap Membantu", font=("Segoe UI", 18, "bold"))
+user = get_user_name()
+title_label = ctk.CTkLabel(window, text=f"🟢 Halo {user}, Milicia siap membantu", font=("Segoe UI", 18, "bold"))
 title_label.pack(pady=20)
 
 listen_button = ctk.CTkButton(window, text="🎙️ Mulai Mendengarkan", font=("Segoe UI", 14), command=listen_and_process)
@@ -153,9 +172,9 @@ listen_button.pack(pady=10)
 
 output_area = ctk.CTkTextbox(window, width=520, height=250, font=("Consolas", 12))
 output_area.pack(pady=15)
-output_area.insert("end", "Milicia siap digunakan...\n")
+output_area.insert("end", f"Milicia siap digunakan oleh {user}...\n")
 output_area.configure(state="disabled")
 
-speak("Halo! Saya Milicia. Senang bisa membantu kamu hari ini.")
+speak(f"Halo {user}! Saya Milicia. Senang bisa membantu kamu hari ini.")
 
 window.mainloop()
