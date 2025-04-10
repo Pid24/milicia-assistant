@@ -3,8 +3,10 @@ from spotipy.oauth2 import SpotifyOAuth
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # Load data dari file .env
+# Load environment variables dari .env
+load_dotenv()
 
+# Autentikasi ke Spotify
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_id=os.getenv("SPOTIPY_CLIENT_ID"),
     client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
@@ -12,9 +14,22 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     scope="user-read-playback-state user-modify-playback-state user-read-currently-playing"
 ))
 
-def play_song(uri):
+def is_device_active():
+    devices = sp.devices()
+    return any(device["is_active"] for device in devices["devices"])
+
+def play_song(uri, is_playlist=False):
     try:
-        sp.start_playback(uris=[uri])
+        if not is_device_active():
+            print("Tidak ada perangkat Spotify aktif.")
+            return False
+
+        if is_playlist:
+            # Mainkan playlist/album penuh
+            sp.start_playback(context_uri=uri)
+        else:
+            # Mainkan satu lagu saja
+            sp.start_playback(uris=[uri])
         return True
     except Exception as e:
         print(f"Error saat play: {e}")
