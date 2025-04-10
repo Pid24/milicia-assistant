@@ -62,6 +62,21 @@ def run_command(command):
             ])
         else:
             speak("Chrome tidak ditemukan.")
+            
+    elif "buka brave" in command:
+        brave_path = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+        if os.path.exists(brave_path):
+            os.startfile(brave_path)
+            speak_natural([
+                "Oke, membuka Brave.",
+                "Brave browser sedang dibuka.",
+                "Sebentar, aku buka Brave dulu ya."
+            ])
+        else:
+            speak("Brave tidak ditemukan.")
+
+    elif "buka browser" in command:
+        speak("Kamu mau pakai browser apa? Chrome atau Brave?")
 
     elif "buka cmd" in command or "buka terminal" in command:
         os.startfile(r"C:\\Windows\\System32\\cmd.exe")
