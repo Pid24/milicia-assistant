@@ -5,12 +5,12 @@ import tempfile
 import os
 import random
 import threading
-import tkinter as tk
-from tkinter import ttk
-from tkinter import scrolledtext
+import customtkinter as ctk
 from spotify_control import play_song, pause_song, resume_song, next_song, is_device_active
 
 recognizer = sr.Recognizer()
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
 
 # === GUI Functions ===
 def speak(text):
@@ -45,8 +45,10 @@ def handle_voice_input():
             speak("Gagal terhubung ke layanan suara.")
 
 def log_output(message):
-    output_area.insert(tk.END, f"{message}\n")
-    output_area.see(tk.END)
+    output_area.configure(state="normal")
+    output_area.insert("end", f"{message}\n")
+    output_area.configure(state="disabled")
+    output_area.see("end")
 
 def run_command(command):
     if "buka chrome" in command:
@@ -114,7 +116,7 @@ def run_command(command):
             "Oke, sampai ketemu lagi ya!",
             "Terima kasih, aku keluar dulu."
         ])
-        window.quit()
+        window.destroy()
 
     else:
         speak_natural([
@@ -124,23 +126,20 @@ def run_command(command):
         ])
 
 # === GUI Setup ===
-window = tk.Tk()
+window = ctk.CTk()
 window.title("Milicia Assistant")
-window.geometry("600x450")
-window.configure(bg="#1e1e2f")
+window.geometry("600x480")
 
-style = ttk.Style()
-style.theme_use("clam")
-style.configure("TButton", font=("Segoe UI", 11), padding=10, background="#4CAF50", foreground="white")
+title_label = ctk.CTkLabel(window, text="🟢 Milicia Siap Membantu", font=("Segoe UI", 18, "bold"))
+title_label.pack(pady=20)
 
-label = tk.Label(window, text="🟢 Milicia Siap Membantu", font=("Segoe UI", 16, "bold"), bg="#1e1e2f", fg="white")
-label.pack(pady=15)
-
-listen_button = ttk.Button(window, text="🎙️ Mulai Mendengarkan", command=listen_and_process)
+listen_button = ctk.CTkButton(window, text="🎙️ Mulai Mendengarkan", font=("Segoe UI", 14), command=listen_and_process)
 listen_button.pack(pady=10)
 
-output_area = scrolledtext.ScrolledText(window, wrap=tk.WORD, width=70, height=15, font=("Consolas", 10), bg="#2d2d3a", fg="white", insertbackground="white")
-output_area.pack(pady=10, padx=10)
+output_area = ctk.CTkTextbox(window, width=520, height=250, font=("Consolas", 12))
+output_area.pack(pady=15)
+output_area.insert("end", "Milicia siap digunakan...\n")
+output_area.configure(state="disabled")
 
 speak("Halo! Saya Milicia. Senang bisa membantu kamu hari ini.")
 
