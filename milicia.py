@@ -1,18 +1,25 @@
 import speech_recognition as sr
-import pyttsx3
+from gtts import gTTS
+import playsound
+import tempfile
 import os
 
 recognizer = sr.Recognizer()
-engine = pyttsx3.init()
-
-# Set voice (opsional)
-voices = engine.getProperty('voices')
-engine.setProperty('voice', voices[0].id)  # Ganti sesuai suara yang diinginkan
 
 def speak(text):
     print(f"Milicia: {text}")
-    engine.say(text)
-    engine.runAndWait()
+    tts = gTTS(text=text, lang='id')
+
+    # Simpan file sementara di folder Temp
+    temp_path = os.path.join(tempfile.gettempdir(), "milicia_temp.mp3")
+    tts.save(temp_path)
+
+    # Mainkan audio
+    playsound.playsound(temp_path)
+
+    # Hapus file setelah diputar
+    os.remove(temp_path)
+
 
 def listen():
     with sr.Microphone() as source:
@@ -47,7 +54,7 @@ def run_command(command):
         os.system("start notepad")
         speak("Membuka Notepad")
 
-    elif "buka file explorer" in command:
+    elif "buka file explorer" in command or "buka folder" in command:
         os.system("explorer")
         speak("Membuka File Explorer")
 
@@ -58,7 +65,7 @@ def run_command(command):
     else:
         speak("Perintah tidak saya kenal, coba lagi.")
 
-# Main loop
+# 🔁 Loop utama
 speak("Halo! Saya Milicia. Siap membantu. Silakan beri perintah.")
 while True:
     cmd = listen()
