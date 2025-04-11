@@ -5,3 +5,5 @@ customtkinter==5.0.0
 feedparser==6.0.10
 spotify-control==0.3.4
 wikipedia==1.4.0
+requests
+

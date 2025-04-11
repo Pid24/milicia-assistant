@@ -2,8 +2,12 @@ import os
 import re
 import feedparser
 import wikipedia
+import requests
+import random
 from spotify_control import play_song, pause_song, resume_song, next_song, is_device_active
 from utils import speak, speak_natural
+from gui_state import window
+import gui_state  # untuk flag waiting_for_genre
 
 
 def calculate(expression):
@@ -12,6 +16,7 @@ def calculate(expression):
         speak(f"Hasilnya adalah {result}")
     except Exception:
         speak("Maaf, ada kesalahan dalam perhitungan. Pastikan format perintah benar.")
+
 
 def get_latest_news(jumlah=3):
     url = "https://www.cnnindonesia.com/nasional/rss"
@@ -23,6 +28,7 @@ def get_latest_news(jumlah=3):
         berita.append(title)
 
     return berita
+
 
 def search_wikipedia(query):
     try:
@@ -36,7 +42,120 @@ def search_wikipedia(query):
     except Exception:
         speak("Terjadi kesalahan saat mencari informasi.")
 
+
+def get_anime_recommendation(genre_name):
+    genre_map = {
+        "aksi": 1,
+        "petualangan": 2,
+        "komedi": 4,
+        "drama": 8,
+        "fantasi": 10,
+        "horror": 14,
+        "romance": 22,
+        "sci-fi": 24,
+        "slice of life": 36,
+        "isekai": 62
+    }
+
+    genre_id = genre_map.get(genre_name.lower())
+    if not genre_id:
+        speak("Maaf, aku belum punya rekomendasi untuk genre itu.")
+        return
+
+    try:
+        url = f"https://api.jikan.moe/v4/anime?genres={genre_id}&order_by=score&sort=desc&limit=10"
+        response = requests.get(url)
+        data = response.json()
+
+        if "data" in data and len(data["data"]) > 0:
+            anime = random.choice(data["data"])
+            title = anime["title"]
+            synopsis = anime.get("synopsis", "Tidak ada sinopsis.")
+            speak(f"Aku rekomendasikan anime berjudul {title}. {synopsis[:250]}...")
+        else:
+            speak("Maaf, aku tidak menemukan anime di genre itu.")
+    except Exception as e:
+        print("Error:", e)
+        speak("Terjadi kesalahan saat mencari rekomendasi anime.")
+
+
+def get_anime_title_only(genre_name):
+    genre_map = {
+        "aksi": 1,
+        "petualangan": 2,
+        "komedi": 4,
+        "drama": 8,
+        "fantasi": 10,
+        "horror": 14,
+        "romance": 22,
+        "sci-fi": 24,
+        "slice of life": 36,
+        "isekai": 62
+    }
+
+    genre_id = genre_map.get(genre_name.lower())
+    if not genre_id:
+        speak("Genre itu belum aku kenali.")
+        return
+
+    try:
+        url = f"https://api.jikan.moe/v4/anime?genres={genre_id}&order_by=score&sort=desc&limit=10"
+        response = requests.get(url)
+        data = response.json()
+
+        if "data" in data and len(data["data"]) > 0:
+            anime = random.choice(data["data"])
+            title = anime["title"]
+            speak(f"Anime {genre_name} yang aku rekomendasikan adalah {title}.")
+        else:
+            speak("Maaf, aku tidak menemukan anime dengan genre itu.")
+    except Exception as e:
+        print("Error:", e)
+        speak("Terjadi kesalahan saat mengambil data anime.")
+
+
+def get_current_season_anime():
+    try:
+        url = "https://api.jikan.moe/v4/seasons/now?sfw"
+        response = requests.get(url)
+        data = response.json()
+
+        if "data" in data and len(data["data"]) > 0:
+            anime = random.choice(data["data"])
+            title = anime["title"]
+            synopsis = anime.get("synopsis", "Tidak ada sinopsis.")
+            speak(f"Salah satu anime musim ini adalah {title}. {synopsis[:250]}...")
+        else:
+            speak("Maaf, aku tidak menemukan anime yang sedang tayang.")
+    except Exception as e:
+        print("Error:", e)
+        speak("Terjadi kesalahan saat mengambil data anime musim ini.")
+
+
 def run_command(command):
+    genre_keywords = [
+        "aksi", "petualangan", "komedi", "drama",
+        "fantasi", "romance", "horror", "sci-fi",
+        "slice of life", "isekai"
+    ]
+
+    # Tangani perintah: "genre anime [komedi/drama/...]" ➜ hanya sebut judul
+    if "genre anime" in command:
+        for genre in genre_keywords:
+            if genre in command:
+                get_anime_title_only(genre)
+                return
+
+    # Jika sedang menunggu user sebut genre anime (setelah "rekomendasi anime")
+    if gui_state.waiting_for_genre:
+        for genre in genre_keywords:
+            if genre in command:
+                gui_state.waiting_for_genre = False
+                get_anime_recommendation(genre)
+                return
+        speak("Genre itu belum aku kenali. Bisa sebut genre lain?")
+        return
+
     if "buka chrome" in command:
         chrome_path = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
         if os.path.exists(chrome_path):
@@ -126,7 +245,7 @@ def run_command(command):
             "Oke, sampai ketemu lagi ya!",
             "Terima kasih, aku keluar dulu."
         ])
-        exit()
+        window.destroy()
 
     elif "hitung" in command or "berapa hasil dari" in command or "berapakah" in command:
         expression = re.sub(r"[^0-9+\-*/().]", "", command)
@@ -142,6 +261,22 @@ def run_command(command):
             search_wikipedia(keyword)
         else:
             speak("Mau cari tahu tentang apa?")
+
+    elif "anime musim ini" in command or "anime terbaru" in command:
+        get_current_season_anime()
+
+    elif "rekomendasi anime" in command and "genre anime" not in command:
+        found = False
+        for genre in genre_keywords:
+            if genre in command:
+                get_anime_recommendation(genre)
+                found = True
+                break
+
+        if not found:
+            gui_state.waiting_for_genre = True
+            speak("Kamu ingin genre anime yang seperti apa?")
+
     else:
         speak_natural([
             "Aku belum paham perintah itu.",
