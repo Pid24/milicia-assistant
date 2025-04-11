@@ -8,6 +8,7 @@ import threading
 import customtkinter as ctk
 import json
 import feedparser
+import wikipedia
 from spotify_control import play_song, pause_song, resume_song, next_song, is_device_active
 import re
 
@@ -81,7 +82,6 @@ def get_latest_news(jumlah=3):
 
     return berita
 
-# === Kalkulator ===
 def calculate(expression):
     try:
         # Menggunakan eval untuk mengevaluasi ekspresi matematika dari pengguna
@@ -90,7 +90,18 @@ def calculate(expression):
     except Exception as e:
         speak("Maaf, ada kesalahan dalam perhitungan. Pastikan format perintah benar.")
 
-# === Perintah untuk kalkulator ===
+def search_wikipedia(query):
+    try:
+        wikipedia.set_lang("id")
+        summary = wikipedia.summary(query, sentences=2)
+        speak(summary)
+    except wikipedia.DisambiguationError as e:
+        speak("Topiknya terlalu umum. Bisa lebih spesifik?")
+    except wikipedia.PageError:
+        speak("Maaf, aku tidak menemukan informasi itu.")
+    except Exception as e:
+        speak("Terjadi kesalahan saat mencari informasi.")
+
 def run_command(command):
     if "buka chrome" in command:
         chrome_path = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
@@ -183,13 +194,21 @@ def run_command(command):
         ])
         window.destroy()
 
-    # Fitur Kalkulator
     elif "hitung" in command or "berapa hasil dari" in command or "berapakah" in command:
         expression = re.sub(r"[^0-9+\-*/().]", "", command)  # Hanya membolehkan angka dan operator
         if expression:
             calculate(expression)
         else:
             speak("Maaf, aku tidak bisa menangkap ekspresi matematikanya. Bisa dicoba lagi?")
+    
+    elif command.startswith("apa itu ") or command.startswith("siapa itu ") or "jelaskan" in command:
+        keyword = command.replace("apa itu ", "").replace("siapa itu ", "").replace("jelaskan", "").strip()
+        if keyword:
+            speak(f"Aku cari tahu tentang {keyword} ya...")
+            search_wikipedia(keyword)
+        else:
+            speak("Mau cari tahu tentang apa?")
+
     else:
         speak_natural([
             "Aku belum paham perintah itu.",
