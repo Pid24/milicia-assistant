@@ -7,3 +7,5 @@ window = None
 is_processing = False  # Flag untuk mencegah double-click saat AI sedang berpikir
 hard_quit = None       # Fungsi untuk mematikan aplikasi secara total (termasuk Tray)
 handsfree_mode = False # Mode Vosk Wake Word
+handsfree_switch = None # Objek switch UI
+

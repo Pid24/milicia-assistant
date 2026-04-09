@@ -2,9 +2,15 @@ import os
 import sys
 
 def create_startup_script():
-    # Mendapatkan path absolut ke folder virtual environment dan file milicia.py
+    # Mendapatkan path absolut ke file milicia.py
     project_dir = os.path.dirname(os.path.abspath(__file__))
-    python_exe = os.path.join(project_dir, "venv", "Scripts", "pythonw.exe") # Gunakan pythonw.exe agar tidak ada window CMD
+    
+    # Deteksi path Python yang dipakai user saat ini, gunakan pythonw agar tidak ada CMD Hitam
+    python_dir = os.path.dirname(sys.executable)
+    python_exe = os.path.join(python_dir, "pythonw.exe")
+    if not os.path.exists(python_exe):
+        python_exe = sys.executable  # Fallback
+
     script_path = os.path.join(project_dir, "milicia.py")
     
     # Path ke folder Startup Windows

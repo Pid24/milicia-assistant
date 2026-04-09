@@ -11,6 +11,21 @@ import sys
 import threading
 import pystray
 from PIL import Image, ImageDraw
+
+# Fix untuk Autostart: Pastikan working directory selalu di folder tempat milicia.py berada
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# Prevent multiple instances and bring existing to foreground
+try:
+    import ctypes
+    hwnd = ctypes.windll.user32.FindWindowW(None, "Milicia AI")
+    if hwnd:
+        ctypes.windll.user32.ShowWindow(hwnd, 5)  # SW_SHOW
+        ctypes.windll.user32.SetForegroundWindow(hwnd)
+        sys.exit(0)
+except Exception:
+    pass
+
 import gui_state
 from ollama_brain import is_ollama_running, reset_history
 from utils import speak, get_time_greeting
@@ -97,11 +112,13 @@ window.protocol('WM_DELETE_WINDOW', hide_window)
 # Import dependencies yang butuh window ter-define
 from voice import listen_and_process, start_wake_word_listener
 from gui_utils import log_output
+from prayer_times import start_prayer_reminder
 
 # =============================================
-# START WAKE WORD DAEMON
+# START WAKE WORD & PRAYER DAEMON
 # =============================================
 start_wake_word_listener()
+start_prayer_reminder()
 
 # =============================================
 # GUI LAYOUT
@@ -238,6 +255,7 @@ handsfree_switch = ctk.CTkSwitch(
     button_hover_color="#f0f0f0",
     command=toggle_handsfree
 )
+gui_state.handsfree_switch = handsfree_switch
 handsfree_switch.pack(side="left", padx=15)
 
 # =============================================
@@ -254,6 +272,10 @@ if "--background" in sys.argv:
     # Sembunyikan window dan jalankan tray langsung
     window.withdraw()
     hide_window()
+    
+    # Otomatis aktifkan Hands-Free Mode kalau jalan di background
+    handsfree_switch.select()
+    toggle_handsfree()
 
 if ollama_active:
     log_output("✅ Koneksi ke Otak AI (Ollama Local) Berhasil.")

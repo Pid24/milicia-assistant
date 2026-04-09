@@ -15,6 +15,13 @@ from ollama_brain import ask_ollama
 
 # === Perintah Sistem (langsung dieksekusi tanpa AI) ===
 
+def sleep_mode():
+    gui_state.handsfree_mode = False
+    if hasattr(gui_state, 'handsfree_switch') and gui_state.handsfree_switch:
+        gui_state.handsfree_switch.deselect()
+    speak("Baiklah, mode dengar otomatis dimatikan. Fokus ya! Kamu bisa panggil aku lagi dengan menyalakan tombol di aplikasi atau klik Tray Icon.")
+
+
 def open_chrome():
     chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     if os.path.exists(chrome_path):
@@ -75,6 +82,11 @@ SYSTEM_COMMANDS = {
     "keluar": exit_app,
     "exit": exit_app,
     "tutup milicia": exit_app,
+    "matikan suara": sleep_mode,
+    "mode tidur": sleep_mode,
+    "tidur": sleep_mode,
+    "jangan ganggu": sleep_mode,
+    "fokus game": sleep_mode,
 }
 
 

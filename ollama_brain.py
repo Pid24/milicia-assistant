@@ -6,6 +6,8 @@ Milicia mengirimkan teks ke sini, dan menerima balasan cerdas dari AI.
 
 import requests
 import json
+import datetime
+import prayer_times
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen2.5:1.5b"
@@ -55,10 +57,23 @@ def ask_ollama(user_message: str) -> str:
     if len(conversation_history) > MAX_HISTORY:
         conversation_history = conversation_history[-MAX_HISTORY:]
 
-    # Susun pesan: system prompt + riwayat percakapan
+    now = datetime.datetime.now()
+    informasi_tambahan = f"\n\n[INFO SISTEM: Saat ini tanggal {now.strftime('%d-%m-%Y')} dan waktu menunjukkan tepat jam {now.strftime('%H:%M')}."
+
+    if prayer_times.cached_prayer_times:
+        prayer_info = ", ".join(f"{k}: {v}" for k, v in prayer_times.cached_prayer_times.items())
+        city = prayer_times.user_location.get('city', 'wilayah mu')
+        informasi_tambahan += f" Jadwal waktu sholat hari ini untuk {city}: {prayer_info}.]"
+    else:
+        informasi_tambahan += "]"
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
+        {"role": "system", "content": SYSTEM_PROMPT + informasi_tambahan}
     ] + conversation_history
+    
+    # Prepend Contextual Time to the current user's message to avoid memory hallucination
+    messages[-1]["content"] = f"[Konteks Waktu: {now.strftime('%H:%M')}]\n{user_message}"
+
 
     try:
         response = requests.post(
