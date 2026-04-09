@@ -1,95 +1,206 @@
+"""
+Milicia AI Assistant — Asisten Virtual Lokal Berbasis Ollama
+Ditenagai oleh model qwen2.5:1.5b yang berjalan 100% di laptop kamu.
+"""
+
 import customtkinter as ctk
 import json
 import os
-import gui_state  # harus duluan untuk inject window
-from utils import speak
+import threading
+import gui_state
+from ollama_brain import is_ollama_running, reset_history
 
 USER_DATA_FILE = "user_data.json"
+
 
 def get_user_name():
     if os.path.exists(USER_DATA_FILE):
         with open(USER_DATA_FILE, "r") as f:
             data = json.load(f)
             return data.get("name", "pengguna")
-    else:
-        return "pengguna"
+    return "pengguna"
+
 
 def set_user_name(name):
     with open(USER_DATA_FILE, "w") as f:
         json.dump({"name": name}, f)
 
+
 # === Setup UI Theme ===
-ctk.set_appearance_mode("dark")
+ctk.set_appearance_mode("dark")  # Paksa ke mode gelap karena lebih elegan
 ctk.set_default_color_theme("blue")
 
-# Set username (hanya sekali)
 set_user_name("Rofid")
 
 # === Main Window ===
 window = ctk.CTk()
-window.title("Milicia Assistant")
-window.geometry("720x540")
+window.title("Milicia AI")
+window.geometry("850x650")
 window.resizable(False, False)
 
-# ⬅️ Simpan window ke gui_state sebelum import voice
+# Palet Warna Modern (Night Owl / Tokyo Night Aesthetic)
+BG_COLOR = "#0b0c10"          # Sangat gelap, hampir hitam
+FRAME_COLOR = "#1f2833"       # Abu-abu kebiruan gelap
+ACCENT_COLOR = "#66fcf1"      # Cyan neon menyala
+ACCENT_HOVER = "#45a29e"      # Cyan redup
+TEXT_PRIMARY = "#c5c6c7"      # Putih tulang / abu terang
+TEXT_MUTED = "#8A909D"        # Abu-abu pudar
+
+window.configure(fg_color=BG_COLOR)
+
+# Simpan window ke gui_state sebelum import voice
 gui_state.window = window
 
-# Sekarang baru boleh import voice (setelah window sudah tersedia)
+# Import setelah window tersedia
 from voice import listen_and_process
+from utils import speak
+from gui_utils import log_output
 
-# === Get user info ===
 user = get_user_name()
 
-# === Main Frame ===
-main_frame = ctk.CTkFrame(window, corner_radius=15)
+# =============================================
+# GUI LAYOUT
+# =============================================
+
+# === Main Frame (Container) ===
+main_frame = ctk.CTkFrame(window, corner_radius=20, fg_color=BG_COLOR)
 main_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-# === Header ===
+# === Header Frame ===
 header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-header_frame.pack(fill="x", padx=10, pady=(15, 5))
+header_frame.pack(fill="x", pady=(5, 10))
 
+# Logo / Judul
 title_label = ctk.CTkLabel(
     header_frame,
-    text=f"🧠 Halo {user}, Milicia siap membantu",
-    font=("Segoe UI", 20, "bold")
+    text=f"✨ Milicia AI",
+    font=("Segoe UI", 26, "bold"),
+    text_color="#ffffff"
 )
-title_label.pack(side="left")
+title_label.pack(side="left", padx=10)
 
-def toggle_theme():
-    mode = ctk.get_appearance_mode()
-    new_mode = "light" if mode == "Dark" else "dark"
-    ctk.set_appearance_mode(new_mode)
-    theme_btn.configure(text="🌙" if new_mode == "dark" else "🌞")
+greeting_label = ctk.CTkLabel(
+    header_frame,
+    text=f"Welcome back, {user}",
+    font=("Segoe UI", 12),
+    text_color=TEXT_MUTED
+)
+greeting_label.pack(side="left", padx=10, pady=(8, 0))
 
-theme_btn = ctk.CTkButton(header_frame, text="🌞", width=40, command=toggle_theme)
-theme_btn.pack(side="right", padx=5)
+# === Status Panel ===
+status_frame = ctk.CTkFrame(main_frame, fg_color=FRAME_COLOR, corner_radius=10, height=40)
+status_frame.pack(fill="x", pady=(0, 15))
+status_frame.pack_propagate(False)
 
-# === Status / Loader ===
-status_var = ctk.StringVar(value="🔵 Menunggu perintah...")
-status_label = ctk.CTkLabel(main_frame, textvariable=status_var, font=("Segoe UI", 12, "italic"))
-status_label.pack(pady=(0, 5))
+ollama_active = is_ollama_running()
+status_dot = "🟢" if ollama_active else "🔴"
+status_text = "Ollama Active" if ollama_active else "Ollama Offline"
 
-# === Listen Button ===
-listen_button = ctk.CTkButton(
-    main_frame,
-    text="🎙️ Mulai Mendengarkan",
+ollama_label = ctk.CTkLabel(
+    status_frame, 
+    text=f"{status_dot} {status_text}",
+    font=("Segoe UI", 12, "bold"),
+    text_color="#2ecc71" if ollama_active else "#e74c3c"
+)
+ollama_label.pack(side="left", padx=15, pady=8)
+
+model_label = ctk.CTkLabel(
+    status_frame, 
+    text="qwen2.5:1.5b",
+    font=("Segoe UI", 11, "italic"),
+    text_color=TEXT_MUTED
+)
+model_label.pack(side="right", padx=15, pady=8)
+
+# === Chat / Output Area ===
+# Frame sebagai border luar untuk efek panel kaca
+chat_container = ctk.CTkFrame(main_frame, fg_color=FRAME_COLOR, corner_radius=15)
+chat_container.pack(fill="both", expand=True, pady=(0, 15))
+
+output_area = ctk.CTkTextbox(
+    chat_container, 
+    width=780, 
     font=("Segoe UI", 14),
-    width=220,
-    height=40,
-    command=listen_and_process
+    corner_radius=15,
+    fg_color=FRAME_COLOR,
+    text_color=TEXT_PRIMARY,
+    wrap="word",
+    spacing3=8 # Jarak antar paragraf
 )
-listen_button.pack(pady=15)
+output_area.pack(padx=2, pady=2, fill="both", expand=True)
 
-# === Output Area ===
-output_area = ctk.CTkTextbox(main_frame, width=640, height=280, font=("Consolas", 12), corner_radius=12)
-output_area.pack(pady=10)
-
-# Simpan komponen penting ke gui_state agar bisa diakses dari file lain
 gui_state.output_area = output_area
+
+# === Status perintah suara ===
+status_var = ctk.StringVar(value="S i a p   m e n d e n g a r k a n . . .")
+status_label = ctk.CTkLabel(
+    main_frame, 
+    textvariable=status_var,
+    font=("Segoe UI", 11, "bold"),
+    text_color=ACCENT_COLOR
+)
+status_label.pack(pady=(0, 10))
 gui_state.status_var = status_var
 
-# === Initial Greeting ===
-speak(f"Halo {user}! Saya Milicia. Senang bisa membantu kamu hari ini.")
+# === Control Buttons ===
+button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+button_frame.pack(pady=(0, 5))
 
-# === Start the App ===
+# Tombol Mic Besar
+listen_button = ctk.CTkButton(
+    button_frame,
+    text="🎙️ Bicara Sekarang",
+    font=("Segoe UI", 15, "bold"),
+    width=300, 
+    height=55,
+    corner_radius=27, # Sangat bulat menyerupai pill
+    command=listen_and_process,
+    fg_color=ACCENT_COLOR,
+    text_color="#0b0c10", # Teks hitam karena background cyan cerah
+    hover_color=ACCENT_HOVER
+)
+listen_button.pack(side="left", padx=10)
+
+def reset_chat():
+    reset_history()
+    output_area.configure(state="normal")
+    output_area.delete("1.0", "end")
+    output_area.configure(state="disabled")
+    log_output("🔄 Memori dihapus. Milicia siap dengan percakapan baru!")
+
+reset_button = ctk.CTkButton(
+    button_frame,
+    text="🗑️ Reset Chat",
+    font=("Segoe UI", 13, "bold"),
+    width=130, 
+    height=55,
+    corner_radius=27,
+    command=reset_chat,
+    fg_color=FRAME_COLOR,
+    text_color=TEXT_PRIMARY,
+    hover_color="#2b3846"
+)
+reset_button.pack(side="left", padx=10)
+
+# =============================================
+# STARTUP LOGIC
+# =============================================
+
+output_area.configure(state="normal")
+output_area.insert("end", "✨ Inisialisasi Milicia AI...\n\n")
+output_area.configure(state="disabled")
+
+if ollama_active:
+    log_output("✅ Koneksi ke Otak AI (Ollama Local) Berhasil.")
+    log_output("💡 Klik tombol 'Bicara Sekarang' untuk mulai mengobrol.\n")
+    threading.Thread(
+        target=speak,
+        args=(f"Halo {user}! Saya Milicia. Saya sudah siap menemani hari Anda.",),
+        daemon=True
+    ).start()
+else:
+    log_output("⚠️ Peringatan: Tidak dapat terhubung ke Ollama.")
+    log_output("   Pastikan Ollama berjalan di background sebelum mengobrol.")
+    log_output("   Buka command prompt dan ketik: ollama serve\n")
+
 window.mainloop()

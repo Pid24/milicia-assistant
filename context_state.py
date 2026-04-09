@@ -1,1 +1,0 @@
-milicia_state = None

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+
+# Custom data
+user_data.json
+milicia_temp.mp3
+*.mp3
+
+# IDEs
+.vscode/
+.idea/
