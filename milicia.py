@@ -94,10 +94,14 @@ def hide_window():
 # Timpa default close behavior agar me-minimize ke tray
 window.protocol('WM_DELETE_WINDOW', hide_window)
 
-
 # Import dependencies yang butuh window ter-define
-from voice import listen_and_process
+from voice import listen_and_process, start_wake_word_listener
 from gui_utils import log_output
+
+# =============================================
+# START WAKE WORD DAEMON
+# =============================================
+start_wake_word_listener()
 
 # =============================================
 # GUI LAYOUT
@@ -213,6 +217,28 @@ reset_button = ctk.CTkButton(
     hover_color="#2b3846"
 )
 reset_button.pack(side="left", padx=10)
+
+def toggle_handsfree():
+    mode = handsfree_switch.get()
+    gui_state.handsfree_mode = mode
+    if mode:
+        log_output("✅ Mode Hands-Free AKTIF. Ucapkan 'Milicia' kapan saja untuk memanggilku.")
+        if not os.path.exists("vosk_model"):
+            log_output("⚠️ Peringatan: Telinga Offline (Vosk) belum terinstall. Aplikasi mungkin tidak merespons. Jalankan file download_vosk.py di terminal.")
+    else:
+        log_output("🚫 Mode Hands-Free MATI. Milicia hanya mendengar jika tombol ditekan.")
+
+handsfree_switch = ctk.CTkSwitch(
+    button_frame,
+    text="Hands-Free Mode",
+    font=("Segoe UI", 13, "bold"),
+    text_color="#c5c6c7",
+    progress_color=ACCENT_COLOR,
+    button_color="#ffffff",
+    button_hover_color="#f0f0f0",
+    command=toggle_handsfree
+)
+handsfree_switch.pack(side="left", padx=15)
 
 # =============================================
 # STARTUP LOGIC
