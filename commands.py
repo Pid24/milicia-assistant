@@ -54,7 +54,9 @@ def exit_app():
         "Oke, sampai ketemu lagi ya!",
         "Terima kasih, aku istirahat dulu."
     ])
-    if window:
+    if gui_state.hard_quit:
+        gui_state.hard_quit()
+    elif window:
         window.destroy()
 
 

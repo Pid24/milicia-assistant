@@ -1,17 +1,21 @@
 """
 Milicia AI Assistant — Asisten Virtual Lokal Berbasis Ollama
 Ditenagai oleh model qwen2.5:1.5b yang berjalan 100% di laptop kamu.
+Termasuk integrasi System Tray & Background Daemon berjalan di latar belakang.
 """
 
 import customtkinter as ctk
 import json
 import os
+import sys
 import threading
+import pystray
+from PIL import Image, ImageDraw
 import gui_state
 from ollama_brain import is_ollama_running, reset_history
+from utils import speak, get_time_greeting
 
 USER_DATA_FILE = "user_data.json"
-
 
 def get_user_name():
     if os.path.exists(USER_DATA_FILE):
@@ -25,12 +29,12 @@ def set_user_name(name):
     with open(USER_DATA_FILE, "w") as f:
         json.dump({"name": name}, f)
 
-
 # === Setup UI Theme ===
 ctk.set_appearance_mode("dark")  # Paksa ke mode gelap karena lebih elegan
 ctk.set_default_color_theme("blue")
 
 set_user_name("Rofid")
+user = get_user_name()
 
 # === Main Window ===
 window = ctk.CTk()
@@ -39,38 +43,72 @@ window.geometry("850x650")
 window.resizable(False, False)
 
 # Palet Warna Modern (Night Owl / Tokyo Night Aesthetic)
-BG_COLOR = "#0b0c10"          # Sangat gelap, hampir hitam
-FRAME_COLOR = "#1f2833"       # Abu-abu kebiruan gelap
-ACCENT_COLOR = "#66fcf1"      # Cyan neon menyala
-ACCENT_HOVER = "#45a29e"      # Cyan redup
-TEXT_PRIMARY = "#c5c6c7"      # Putih tulang / abu terang
-TEXT_MUTED = "#8A909D"        # Abu-abu pudar
+BG_COLOR = "#0b0c10"          
+FRAME_COLOR = "#1f2833"       
+ACCENT_COLOR = "#66fcf1"      
+ACCENT_HOVER = "#45a29e"      
+TEXT_PRIMARY = "#c5c6c7"      
+TEXT_MUTED = "#8A909D"        
 
 window.configure(fg_color=BG_COLOR)
-
-# Simpan window ke gui_state sebelum import voice
 gui_state.window = window
 
-# Import setelah window tersedia
-from voice import listen_and_process
-from utils import speak
-from gui_utils import log_output
+# === System Tray Logic ===
+tray_icon = None
 
-user = get_user_name()
+def create_tray_image():
+    # Membuat icon logo sederhana bermuatan huruf M
+    img = Image.new('RGB', (64, 64), color=(31, 40, 51))
+    d = ImageDraw.Draw(img)
+    d.text((16, 12), "M", fill=(102, 252, 241), font=None)  # Default font is small, but good enough for tray
+    return img
+
+def show_window(icon, item):
+    icon.stop()
+    window.deiconify()  # Tampilkan window
+
+def quit_app(icon=None, item=None):
+    if icon:
+        icon.stop()
+    window.quit()
+    sys.exit(0)
+
+# Register hard_quit ke gui_state
+gui_state.hard_quit = quit_app
+
+def hide_window():
+    window.withdraw()  # Sembunyikan window
+    
+    # Setup pystray icon
+    global tray_icon
+    image = create_tray_image()
+    menu = (
+        pystray.MenuItem('Tampilkan', show_window, default=True),
+        pystray.MenuItem('Matikan Sepenuhnya', quit_app)
+    )
+    tray_icon = pystray.Icon("milicia", image, "Milicia AI", menu)
+    
+    # Jalankan pystray di thread terpisah
+    threading.Thread(target=tray_icon.run, daemon=True).start()
+
+# Timpa default close behavior agar me-minimize ke tray
+window.protocol('WM_DELETE_WINDOW', hide_window)
+
+
+# Import dependencies yang butuh window ter-define
+from voice import listen_and_process
+from gui_utils import log_output
 
 # =============================================
 # GUI LAYOUT
 # =============================================
 
-# === Main Frame (Container) ===
 main_frame = ctk.CTkFrame(window, corner_radius=20, fg_color=BG_COLOR)
 main_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-# === Header Frame ===
 header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
 header_frame.pack(fill="x", pady=(5, 10))
 
-# Logo / Judul
 title_label = ctk.CTkLabel(
     header_frame,
     text=f"✨ Milicia AI",
@@ -87,7 +125,6 @@ greeting_label = ctk.CTkLabel(
 )
 greeting_label.pack(side="left", padx=10, pady=(8, 0))
 
-# === Status Panel ===
 status_frame = ctk.CTkFrame(main_frame, fg_color=FRAME_COLOR, corner_radius=10, height=40)
 status_frame.pack(fill="x", pady=(0, 15))
 status_frame.pack_propagate(False)
@@ -112,8 +149,6 @@ model_label = ctk.CTkLabel(
 )
 model_label.pack(side="right", padx=15, pady=8)
 
-# === Chat / Output Area ===
-# Frame sebagai border luar untuk efek panel kaca
 chat_container = ctk.CTkFrame(main_frame, fg_color=FRAME_COLOR, corner_radius=15)
 chat_container.pack(fill="both", expand=True, pady=(0, 15))
 
@@ -125,13 +160,12 @@ output_area = ctk.CTkTextbox(
     fg_color=FRAME_COLOR,
     text_color=TEXT_PRIMARY,
     wrap="word",
-    spacing3=8 # Jarak antar paragraf
+    spacing3=8
 )
 output_area.pack(padx=2, pady=2, fill="both", expand=True)
 
 gui_state.output_area = output_area
 
-# === Status perintah suara ===
 status_var = ctk.StringVar(value="S i a p   m e n d e n g a r k a n . . .")
 status_label = ctk.CTkLabel(
     main_frame, 
@@ -142,21 +176,19 @@ status_label = ctk.CTkLabel(
 status_label.pack(pady=(0, 10))
 gui_state.status_var = status_var
 
-# === Control Buttons ===
 button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
 button_frame.pack(pady=(0, 5))
 
-# Tombol Mic Besar
 listen_button = ctk.CTkButton(
     button_frame,
     text="🎙️ Bicara Sekarang",
     font=("Segoe UI", 15, "bold"),
     width=300, 
     height=55,
-    corner_radius=27, # Sangat bulat menyerupai pill
+    corner_radius=27,
     command=listen_and_process,
     fg_color=ACCENT_COLOR,
-    text_color="#0b0c10", # Teks hitam karena background cyan cerah
+    text_color="#0b0c10",
     hover_color=ACCENT_HOVER
 )
 listen_button.pack(side="left", padx=10)
@@ -187,20 +219,29 @@ reset_button.pack(side="left", padx=10)
 # =============================================
 
 output_area.configure(state="normal")
-output_area.insert("end", "✨ Inisialisasi Milicia AI...\n\n")
+output_area.insert("end", "✨ Inisialisasi Milicia AI Desktop Assistant...\n")
+output_area.insert("end", "💡 TIP: Tutup jendela ini untuk menyembunyikan Milicia ke System Tray.\n\n")
 output_area.configure(state="disabled")
+
+# Cek argumen CLI (Jika dijalankan via --background dari autostart script)
+if "--background" in sys.argv:
+    # Sembunyikan window dan jalankan tray langsung
+    window.withdraw()
+    hide_window()
 
 if ollama_active:
     log_output("✅ Koneksi ke Otak AI (Ollama Local) Berhasil.")
-    log_output("💡 Klik tombol 'Bicara Sekarang' untuk mulai mengobrol.\n")
+    
+    # Ambil sapaan waktu otomatis
+    time_greeting = get_time_greeting()
+    
     threading.Thread(
         target=speak,
-        args=(f"Halo {user}! Saya Milicia. Saya sudah siap menemani hari Anda.",),
+        args=(f"{time_greeting} {user}! Sistem Milicia sudah online dan siap membantu.",),
         daemon=True
     ).start()
 else:
     log_output("⚠️ Peringatan: Tidak dapat terhubung ke Ollama.")
     log_output("   Pastikan Ollama berjalan di background sebelum mengobrol.")
-    log_output("   Buka command prompt dan ketik: ollama serve\n")
 
 window.mainloop()
