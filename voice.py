@@ -14,6 +14,16 @@ import pyaudio
 recognizer = sr.Recognizer()
 
 
+# Kalibrasi noise awal sekali saja agar tidak lag saat dipanggil
+def init_calibration():
+    try:
+        with sr.Microphone() as source:
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+    except:
+        pass
+
+threading.Thread(target=init_calibration, daemon=True).start()
+
 def listen_and_process():
     """Memulai thread baru untuk menangkap input suara."""
     # Cegah double-click saat AI sedang berpikir
@@ -31,8 +41,6 @@ def handle_voice_input():
     try:
         with sr.Microphone() as source:
             log_output("─" * 40)
-            log_output("🔄 Mengkalibrasi mikrofon...")
-            recognizer.adjust_for_ambient_noise(source, duration=1)
             log_output("🎙️ Mendengarkan... (bicara sekarang)")
 
             audio = recognizer.listen(source, timeout=8, phrase_time_limit=15)
@@ -97,7 +105,7 @@ def wake_word_loop():
                         
                         log_output("🔔 Panggilan 'Hei Milicia' terdeteksi.")
                         speak("Ya Rofid?")
-                        handle_voice_input()
+                        listen_and_process()
                         break 
                         
             if stream.is_active() or not stream.is_stopped():

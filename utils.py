@@ -1,13 +1,15 @@
 """utils.py — Fungsi utilitas suara (Text-to-Speech) untuk Milicia."""
 
-import os
-import tempfile
 import random
-import uuid
 import datetime
+import io
+import time
+import os
+
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 from gtts import gTTS
 from gui_utils import log_output
-import playsound
 
 
 def speak(text: str):
@@ -15,15 +17,21 @@ def speak(text: str):
     log_output(f"🤖 Milicia: {text}")
     try:
         tts = gTTS(text=text, lang='id')
-        # Gunakan nama file unik agar tidak bentrok antar thread
-        temp_path = os.path.join(tempfile.gettempdir(), f"milicia_{uuid.uuid4().hex[:8]}.mp3")
-        tts.save(temp_path)
-        playsound.playsound(temp_path)
-        # Hapus file setelah selesai diputar
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        
+        # Inisialisasi pygame mixer jika belum
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+            
+        pygame.mixer.music.load(fp, "mp3")
+        pygame.mixer.music.play()
+        
+        # Tunggu sampai suara selesai
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.1)
+            
     except Exception as e:
         log_output(f"⚠️ Gagal memutar suara: {e}")
 
