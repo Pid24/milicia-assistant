@@ -1,5 +1,6 @@
 SpeechRecognition>=3.8.1
 gTTS>=2.2.3
+edge-tts>=7.0.0
 customtkinter>=5.2.0
 requests>=2.0.0
 pystray>=0.19.3

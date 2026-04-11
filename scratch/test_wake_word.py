@@ -1,67 +1,61 @@
-"""Test script - bicara 'milicia' dan lihat apakah Vosk mendengarnya."""
+"""
+Diagnostic: Cari tahu kata apa yang Vosk dengar saat kamu bilang 'milicia'.
+Pakai open vocabulary (tanpa grammar) agar kita bisa lihat raw output.
+Bicara 'milicia' berkali-kali dengan cara berbeda, lalu Ctrl+C untuk selesai.
+"""
 import json
 import vosk
 import pyaudio
 import os
 import sys
 
-# Fix unicode output di Windows console
 sys.stdout.reconfigure(encoding='utf-8')
-
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-os.chdir("..")  # ke root project
+os.chdir("..")
 
-WAKE_WORDS = [
-    "militia", "milicia", "melissa", "malicia",
-    "mili", "milia", "million", "melee",
-    "police", "felicia",
-]
-
-GRAMMAR = json.dumps(WAKE_WORDS + ["[unk]"])
-
-print("Loading Vosk model...")
-vosk.SetLogLevel(-1)  # suppress vosk logs
+vosk.SetLogLevel(-1)
+print("Loading model...")
 model = vosk.Model("vosk_model")
 print("Model loaded!\n")
+print("=" * 55)
+print("Coba ucapkan 'milicia' dengan berbagai cara:")
+print("  - 'milicia' (normal)")
+print("  - 'milisia' (eja per suku kata)")
+print("  - 'militia' (aksen inggris)")
+print("  - 'hey milicia'")
+print("  - 'hei milicia'")
+print()
+print("Semua yang Vosk dengar akan tercetak di sini.")
+print("Tekan Ctrl+C untuk selesai.")
+print("=" * 55 + "\n")
 
 pa = pyaudio.PyAudio()
-default_input = pa.get_default_input_device_info()
-print(f"Default mic: [{default_input['index']}] {default_input['name']}\n")
-
-# Test DENGAN grammar (constrained)
-print("=" * 50)
-print("Bicara 'milicia' beberapa kali...")
-print("Tekan Ctrl+C untuk selesai")
-print("=" * 50 + "\n")
-
 stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4000)
-rec = vosk.KaldiRecognizer(model, 16000, GRAMMAR)
+# Open vocabulary — tanpa grammar, biar kita lihat apa yang Vosk map-kan
+rec = vosk.KaldiRecognizer(model, 16000)
 
-count = 0
+heard = []
 try:
     while True:
         data = stream.read(4000, exception_on_overflow=False)
         if rec.AcceptWaveform(data):
             result = json.loads(rec.Result())
-            text = result.get("text", "")
-            if text and text.strip() != "[unk]":
-                count += 1
-                is_wake = any(w in text.lower() for w in WAKE_WORDS)
-                marker = ">> WAKE WORD DETECTED! <<" if is_wake else "(not wake)"
-                print(f"  #{count} [GRAMMAR] Heard: '{text}' {marker}")
-            # Uncomment below to also see [unk] detections:
-            # elif text:
-            #     print(f"  (background noise)")
+            text = result.get("text", "").strip()
+            if text:
+                heard.append(text)
+                print(f"  Vosk: '{text}'")
         else:
-            partial = json.loads(rec.PartialResult())
-            pt = partial.get("partial", "")
-            if pt and pt.strip() != "[unk]" and pt.strip():
-                print(f"  ... partial: '{pt}'", end="\r")
-
+            partial = json.loads(rec.PartialResult()).get("partial", "").strip()
+            if partial:
+                print(f"  ... '{partial}'", end="\r")
 except KeyboardInterrupt:
     pass
 
 stream.stop_stream()
 stream.close()
 pa.terminate()
-print(f"\n\nTotal detections: {count}")
+
+print(f"\n\nSemua yang didengar:")
+for i, t in enumerate(heard, 1):
+    print(f"  {i}. '{t}'")
+print(f"\nTambahkan kata-kata di atas ke WAKE_WORDS di voice.py")

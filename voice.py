@@ -76,7 +76,8 @@ def handle_voice_input():
 WAKE_WORDS = [
     "militia", "milicia", "melissa", "malicia",
     "mili", "milia", "million", "melee",
-    "police", "felicia",  # variasi fonetik mirip
+    "police", "felicia",
+    "hey", "hey yeah", "hey me"  # Menangkap "hey" dari "hey milicia"
 ]
 
 # Grammar list untuk Vosk — memaksa recognizer HANYA mencocokkan

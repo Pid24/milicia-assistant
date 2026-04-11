@@ -187,6 +187,63 @@ output_area.pack(padx=2, pady=2, fill="both", expand=True)
 
 gui_state.output_area = output_area
 
+# =============================================
+# TEXT INPUT AREA
+# =============================================
+input_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+input_frame.pack(fill="x", pady=(0, 10))
+
+text_input = ctk.CTkEntry(
+    input_frame, 
+    placeholder_text="Ketik pesan untuk Milicia...",
+    font=("Segoe UI", 14),
+    height=45,
+    corner_radius=20,
+    fg_color=FRAME_COLOR,
+    text_color=TEXT_PRIMARY,
+    border_width=1,
+    border_color=ACCENT_HOVER
+)
+text_input.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+def process_text_command(text):
+    from commands import run_command
+    try:
+        run_command(text)
+    finally:
+        gui_state.is_processing = False
+        gui_state.status_var.set("🔵 Siap...")
+
+def handle_text_submit(event=None):
+    if gui_state.is_processing:
+        return
+    text = text_input.get().strip()
+    if not text:
+        return
+    
+    text_input.delete(0, "end")
+    gui_state.is_processing = True
+    gui_state.status_var.set("🧠 Sedang memproses pesan...")
+    log_output(f"⌨️ Rofid: {text}")
+    
+    threading.Thread(target=process_text_command, args=(text,), daemon=True).start()
+
+text_input.bind("<Return>", handle_text_submit)
+
+send_button = ctk.CTkButton(
+    input_frame,
+    text="➤ Kirim",
+    font=("Segoe UI", 14, "bold"),
+    width=100,
+    height=45,
+    corner_radius=20,
+    command=handle_text_submit,
+    fg_color=ACCENT_HOVER,
+    text_color="#ffffff",
+    hover_color=ACCENT_COLOR
+)
+send_button.pack(side="right")
+
 status_var = ctk.StringVar(value="S i a p   m e n d e n g a r k a n . . .")
 status_label = ctk.CTkLabel(
     main_frame, 

@@ -1,60 +1,47 @@
-"""
-test_voice.py — Script untuk test wake word (Vosk) secara isolated.
-Jalankan dari folder milicia-assistant:
-    python scratch/test_voice.py
-"""
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+"""Test edge-tts voice - quick demo."""
+import asyncio
+import io
+import os
+import sys
+import time
 
-import json
-import vosk
-import pyaudio
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
+import edge_tts
 
-WAKE_WORDS = [
-    "militia", "milicia", "melissa", "malicia",
-    "mili", "milia", "million", "melee",
-    "hey mili", "hey militia", "hey melissa",
-    "police", "felicia",
-]
+VOICE = "id-ID-GadisNeural"
 
-def is_wake_word(text: str) -> bool:
-    text = text.lower().strip()
-    for word in WAKE_WORDS:
-        if word in text:
-            return True
-    return False
+async def generate_and_play(text, rate="+0%", pitch="+0Hz"):
+    print(f"Generating: '{text}' (voice={VOICE}, rate={rate}, pitch={pitch})")
+    communicate = edge_tts.Communicate(text=text, voice=VOICE, rate=rate, pitch=pitch)
+    audio_data = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_data.write(chunk["data"])
+    
+    audio_bytes = audio_data.getvalue()
+    print(f"  Audio size: {len(audio_bytes)} bytes")
+    
+    fp = io.BytesIO(audio_bytes)
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+    pygame.mixer.music.load(fp, "mp3")
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy():
+        time.sleep(0.1)
+    print("  Done playing!")
 
-print("🔄 Memuat Vosk model...")
-try:
-    model = vosk.Model("vosk_model")
-    print("✅ Vosk model berhasil dimuat!")
-except Exception as e:
-    print(f"❌ Gagal muat model: {e}")
-    sys.exit(1)
+async def main():
+    # Test 1: Normal speed
+    await generate_and_play("Halo Rofid! Ini suara baru Milicia, lebih natural kan?")
+    time.sleep(0.5)
+    
+    # Test 2: Slightly faster
+    await generate_and_play("Aku sekarang pakai suara Microsoft Neural, jauh lebih bagus dari Google TTS.", rate="+5%")
+    time.sleep(0.5)
+    
+    # Test 3: Casual
+    await generate_and_play("Selamat siang! Sistem Milicia sudah online dan siap membantu kamu.")
 
-pa = pyaudio.PyAudio()
-stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4000)
-rec = vosk.KaldiRecognizer(model, 16000)
-
-print("\n🎙️  Microphone aktif. Ucapkan 'Milicia' (atau variasi apapun).")
-print("    Ctrl+C untuk berhenti.\n")
-
-try:
-    while True:
-        data = stream.read(4000, exception_on_overflow=False)
-        if rec.AcceptWaveform(data):
-            result = json.loads(rec.Result())
-            text = result.get("text", "")
-            if text:
-                hit = "✅ WAKE WORD!" if is_wake_word(text) else "   (bukan wake word)"
-                print(f"🔍 Vosk heard: '{text}'  {hit}")
-        else:
-            partial = json.loads(rec.PartialResult()).get("partial", "")
-            if partial:
-                print(f"   [partial] '{partial}'", end="\r")
-except KeyboardInterrupt:
-    print("\n\n🛑 Test dihentikan.")
-finally:
-    stream.stop_stream()
-    stream.close()
-    pa.terminate()
+if __name__ == "__main__":
+    asyncio.run(main())
