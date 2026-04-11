@@ -1,7 +1,9 @@
-SpeechRecognition==3.8.1
-gTTS==2.2.3
-playsound==1.2.2
+SpeechRecognition>=3.8.1
+gTTS>=2.2.3
 customtkinter>=5.2.0
 requests>=2.0.0
 pystray>=0.19.3
 Pillow>=10.0.0
+vosk>=0.3.45
+PyAudio>=0.2.14
+pygame>=2.5.0

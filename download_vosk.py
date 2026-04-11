@@ -3,6 +3,9 @@ import requests
 import zipfile
 import shutil
 
+# Model English US kecil (~40MB). Meskipun asisten berbahasa Indonesia,
+# wake word "Milicia" cukup dekat dengan kata English "militia" sehingga
+# model ini bisa mendeteksinya. Matching dilakukan secara fonetik di voice.py.
 MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
 MODEL_DIR = "vosk_model"
 ZIP_PATH = "vosk_temp.zip"

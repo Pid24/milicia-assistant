@@ -19,7 +19,7 @@ def init_calibration():
     try:
         with sr.Microphone() as source:
             recognizer.adjust_for_ambient_noise(source, duration=1)
-    except:
+    except Exception:
         pass
 
 threading.Thread(target=init_calibration, daemon=True).start()
@@ -66,52 +66,161 @@ def handle_voice_input():
         gui_state.status_var.set("🔵 Siap mendengarkan...")
 
 
-def start_wake_word_listener():
-    """Menjalankan engine Vosk di background untuk menunggu kata sakti"""
-    threading.Thread(target=wake_word_loop, daemon=True).start()
+# =============================================
+# WAKE WORD (Hands-Free Mode) — Vosk Engine
+# =============================================
 
-def wake_word_loop():
+# Daftar variasi fonetik wake word yang bisa dikenali Vosk English model.
+# Karena kita pakai model EN, kita perlu mencocokkan bagaimana Vosk
+# mendengar kata "Milicia" dalam bahasa Inggris.
+WAKE_WORDS = [
+    "militia", "milicia", "melissa", "malicia",
+    "mili", "milia", "million", "melee",
+    "police", "felicia",  # variasi fonetik mirip
+]
+
+# Grammar list untuk Vosk — memaksa recognizer HANYA mencocokkan
+# kata-kata ini, bukan seluruh vocabulary. Ini jauh lebih akurat
+# karena model kecil tidak punya "militia" di open vocabulary-nya.
+# "[unk]" menangkap semua suara yang bukan wake word.
+VOSK_GRAMMAR = json.dumps(
+    WAKE_WORDS + ["[unk]"]
+)
+
+
+def _is_wake_word(text: str) -> bool:
+    """Cek apakah teks mengandung wake word. Case-insensitive."""
+    text = text.lower().strip()
+    if not text:
+        return False
+    # Abaikan jika hanya "[unk]" atau kosong
+    if text == "[unk]":
+        return False
+    for word in WAKE_WORDS:
+        if word in text:
+            return True
+    return False
+
+
+def start_wake_word_listener():
+    """Menjalankan engine Vosk di background untuk menunggu kata sakti."""
+    threading.Thread(target=_wake_word_loop, daemon=True).start()
+
+
+def _wake_word_loop():
+    """Loop utama wake word detection. Mengelola lifecycle PyAudio dengan benar."""
+    
+    # Load Vosk model sekali saja
     try:
         model = vosk.Model("vosk_model")
+        log_output("✅ Vosk wake word engine berhasil dimuat.")
     except Exception as e:
-        log_output("⚠️ Gagal memuat Vosk. Pastikan model sudah diunduh.")
+        log_output(f"⚠️ Gagal memuat Vosk model: {e}")
+        log_output("   Pastikan folder 'vosk_model' ada dan berisi model yang valid.")
+        log_output("   Jalankan: python download_vosk.py")
         return
 
-    p = pyaudio.PyAudio()
-    
     while True:
+        # Tunggu sampai handsfree mode diaktifkan
         if not gui_state.handsfree_mode:
-            time.sleep(1)
+            time.sleep(0.5)
             continue
             
+        # Tunggu sampai AI selesai memproses
         if gui_state.is_processing:
-            time.sleep(1)
+            time.sleep(0.5)
             continue
-            
+
+        # Buat PyAudio instance baru setiap siklus untuk menghindari resource leak
+        pa = None
+        stream = None
         try:
-            stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=8000)
-            stream.start_stream()
-            rec = vosk.KaldiRecognizer(model, 16000)
-            
+            pa = pyaudio.PyAudio()
+            stream = pa.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=16000,
+                input=True,
+                frames_per_buffer=4000
+            )
+            rec = vosk.KaldiRecognizer(model, 16000, VOSK_GRAMMAR)
+
+            # Loop mendengarkan sampai wake word terdeteksi atau mode dimatikan
             while gui_state.handsfree_mode and not gui_state.is_processing:
                 data = stream.read(4000, exception_on_overflow=False)
+                
                 if rec.AcceptWaveform(data):
                     result = json.loads(rec.Result())
-                    text = result.get("text", "").lower()
+                    text = result.get("text", "")
                     
-                    if "milicia" in text or "militia" in text or "melissa" in text or "hey me" in text or "hey" in text or "mili" in text:
+                    if text:
+                        log_output(f"🔍 Vosk heard: '{text}'")
+                    
+                    if _is_wake_word(text):
+                        log_output("🔔 Wake word 'Milicia' terdeteksi!")
+                        
+                        # Tutup stream SEBELUM speak & listen 
+                        # agar tidak conflict dengan microphone
                         stream.stop_stream()
                         stream.close()
+                        stream = None
+                        pa.terminate()
+                        pa = None
                         
-                        log_output("🔔 Panggilan 'Hei Milicia' terdeteksi.")
+                        # Respons ke user
                         speak("Ya Rofid?")
-                        listen_and_process()
-                        break 
                         
-            if stream.is_active() or not stream.is_stopped():
-                stream.stop_stream()
-                stream.close()
-                
+                        # Tunggu sebentar agar speak selesai
+                        time.sleep(0.3)
+                        
+                        # Aktifkan mode dengar
+                        listen_and_process()
+                        
+                        # Tunggu sampai processing selesai sebelum restart loop
+                        while gui_state.is_processing:
+                            time.sleep(0.5)
+                        
+                        break  # Keluar dari inner loop, akan restart dari outer loop
+                        
+                else:
+                    # Partial result — cek juga untuk responsivitas lebih cepat
+                    partial = json.loads(rec.PartialResult())
+                    partial_text = partial.get("partial", "")
+                    if _is_wake_word(partial_text):
+                        log_output(f"🔔 Wake word terdeteksi (partial): '{partial_text}'")
+                        
+                        stream.stop_stream()
+                        stream.close()
+                        stream = None
+                        pa.terminate()
+                        pa = None
+                        
+                        speak("Ya Rofid?")
+                        time.sleep(0.3)
+                        listen_and_process()
+                        
+                        while gui_state.is_processing:
+                            time.sleep(0.5)
+                        
+                        break
+
+        except OSError as e:
+            log_output(f"⚠️ Audio device error: {e}")
+            time.sleep(2)
         except Exception as e:
+            log_output(f"⚠️ Wake word error: {e}")
             time.sleep(1)
-            continue
+        finally:
+            # Pastikan stream dan PyAudio selalu di-cleanup
+            try:
+                if stream is not None:
+                    if stream.is_active():
+                        stream.stop_stream()
+                    stream.close()
+            except Exception:
+                pass
+            try:
+                if pa is not None:
+                    pa.terminate()
+            except Exception:
+                pass

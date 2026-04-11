@@ -106,12 +106,9 @@ def run_command(command: str):
 
     # Kalau bukan system command, tanya AI
     log_output("🧠 Milicia sedang berpikir...")
-    gui_state.is_processing = True
 
     try:
         ai_reply = ask_ollama(command)
         speak(ai_reply)
     except Exception as e:
         speak(f"Maaf, terjadi kesalahan: {str(e)}")
-    finally:
-        gui_state.is_processing = False

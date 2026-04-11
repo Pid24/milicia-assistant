@@ -5,35 +5,40 @@ import datetime
 import io
 import time
 import os
+import threading
 
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 from gtts import gTTS
 from gui_utils import log_output
 
+# Lock untuk mencegah dua speak() berjalan bersamaan (tumpang tindih audio)
+_speak_lock = threading.Lock()
+
 
 def speak(text: str):
     """Mengucapkan teks menggunakan Google TTS dan menampilkan log di GUI."""
     log_output(f"🤖 Milicia: {text}")
-    try:
-        tts = gTTS(text=text, lang='id')
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        
-        # Inisialisasi pygame mixer jika belum
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
+    with _speak_lock:
+        try:
+            tts = gTTS(text=text, lang='id')
+            fp = io.BytesIO()
+            tts.write_to_fp(fp)
+            fp.seek(0)
             
-        pygame.mixer.music.load(fp, "mp3")
-        pygame.mixer.music.play()
-        
-        # Tunggu sampai suara selesai
-        while pygame.mixer.music.get_busy():
-            time.sleep(0.1)
+            # Inisialisasi pygame mixer jika belum
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+                
+            pygame.mixer.music.load(fp, "mp3")
+            pygame.mixer.music.play()
             
-    except Exception as e:
-        log_output(f"⚠️ Gagal memutar suara: {e}")
+            # Tunggu sampai suara selesai
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+                
+        except Exception as e:
+            log_output(f"⚠️ Gagal memutar suara: {e}")
 
 
 def speak_natural(options: list[str]):

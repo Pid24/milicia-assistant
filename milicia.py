@@ -236,7 +236,7 @@ reset_button = ctk.CTkButton(
 reset_button.pack(side="left", padx=10)
 
 def toggle_handsfree():
-    mode = handsfree_switch.get()
+    mode = bool(handsfree_switch.get())  # CTkSwitch returns 0/1, convert to bool
     gui_state.handsfree_mode = mode
     if mode:
         log_output("✅ Mode Hands-Free AKTIF. Ucapkan 'Milicia' kapan saja untuk memanggilku.")
