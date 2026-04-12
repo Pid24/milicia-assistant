@@ -11,6 +11,7 @@ import asyncio
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 import edge_tts
+import gui_state
 from gui_utils import log_output
 
 # Lock untuk mencegah dua speak() berjalan bersamaan (tumpang tindih audio)
@@ -59,7 +60,10 @@ def speak(text: str):
                 
             pygame.mixer.music.load(fp, "mp3")
             pygame.mixer.music.play()
-            
+
+            # Aktifkan flag speaking untuk visualizer JARVIS
+            gui_state.is_speaking = True
+
             # Tunggu sampai suara selesai
             while pygame.mixer.music.get_busy():
                 time.sleep(0.1)
@@ -67,6 +71,8 @@ def speak(text: str):
         except Exception as e:
             log_output(f"⚠️ Edge TTS gagal: {e}, mencoba fallback gTTS...")
             _speak_fallback_gtts(text)
+        finally:
+            gui_state.is_speaking = False
 
 
 def _speak_fallback_gtts(text: str):

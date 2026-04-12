@@ -8,4 +8,6 @@ is_processing = False  # Flag untuk mencegah double-click saat AI sedang berpiki
 hard_quit = None       # Fungsi untuk mematikan aplikasi secara total (termasuk Tray)
 handsfree_mode = False # Mode Vosk Wake Word
 handsfree_switch = None # Objek switch UI
+is_speaking = False    # Flag: True saat Milicia sedang berbicara (untuk visualizer)
+is_listening = False   # Flag: True saat sedang mendengarkan input suara user
 
