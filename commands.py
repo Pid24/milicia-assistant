@@ -1,11 +1,15 @@
 """
-commands.py — Sistem Perintah AI-First (Agentic Pipeline)
-Modul ini memproses perintah pengguna. Semua perintah dikirim ke otak AI Ollama
-yang akan memutuskan sendiri apakah perlu menjalankan tool (aksi) atau menjawab teks biasa.
-Hanya perintah kritis (exit, sleep) yang tetap diproses langsung tanpa AI.
+commands.py — Sistem Perintah Hybrid (Smart Router + AI)
+Modul ini memproses perintah pengguna dengan pendekatan hybrid:
+1. Smart Router mendeteksi intent aksi (buka app, volume, cari, dll) via regex/keyword.
+2. Jika aksi terdeteksi → eksekusi langsung via actions.py, lalu minta AI buat respons natural.
+3. Jika tidak terdeteksi → kirim ke AI untuk dijawab sebagai percakapan biasa.
+
+Pendekatan ini lebih reliable daripada mengandalkan model kecil untuk function calling.
 """
 
 import os
+import re
 import threading
 import customtkinter as ctk
 
@@ -13,8 +17,13 @@ from utils import speak, speak_natural
 from gui_utils import log_output
 from gui_state import window
 import gui_state
-from ollama_brain import ask_ollama
-from actions import _execute_shutdown, _execute_restart
+from ollama_brain import ask_ollama, ask_ollama_simple, ask_ollama_detailed
+from actions import (
+    open_website, open_application, shutdown_computer, restart_computer,
+    lock_screen, set_volume, get_battery_status, get_system_info,
+    take_screenshot, search_files, search_web, search_news, open_file,
+    _execute_shutdown, _execute_restart
+)
 
 
 # === Perintah Kritis (langsung dieksekusi tanpa AI karena harus instan) ===
@@ -49,6 +58,183 @@ CRITICAL_COMMANDS = {
     "jangan ganggu": sleep_mode,
     "fokus game": sleep_mode,
 }
+
+
+# =============================================
+# SMART ROUTER — Deteksi intent aksi via regex
+# =============================================
+
+# Daftar website populer dan aliasnya
+WEBSITE_MAP = {
+    "youtube": "https://youtube.com",
+    "google": "https://google.com",
+    "github": "https://github.com",
+    "facebook": "https://facebook.com",
+    "instagram": "https://instagram.com",
+    "twitter": "https://twitter.com",
+    "x": "https://x.com",
+    "reddit": "https://reddit.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "tiktok": "https://tiktok.com",
+    "linkedin": "https://linkedin.com",
+    "stackoverflow": "https://stackoverflow.com",
+    "stack overflow": "https://stackoverflow.com",
+    "chatgpt": "https://chat.openai.com",
+    "gmail": "https://mail.google.com",
+    "drive": "https://drive.google.com",
+    "maps": "https://maps.google.com",
+    "netflix": "https://netflix.com",
+    "twitch": "https://twitch.tv",
+    "wikipedia": "https://wikipedia.org",
+    "tokopedia": "https://tokopedia.com",
+    "shopee": "https://shopee.co.id",
+}
+
+# Daftar nama app yang dikenali
+APP_NAMES = [
+    "chrome", "brave", "vscode", "vs code", "visual studio code",
+    "notepad", "cmd", "terminal", "powershell",
+    "explorer", "file explorer", "calculator", "kalkulator",
+    "paint", "spotify", "discord", "telegram", "obs",
+    "word", "excel", "settings", "pengaturan",
+    "task manager",
+]
+
+# Mapping alias nama app ke key di APP_REGISTRY
+APP_ALIAS = {
+    "vs code": "vscode",
+    "visual studio code": "vscode",
+    "file explorer": "explorer",
+    "kalkulator": "calculator",
+    "pengaturan": "settings",
+}
+
+
+def detect_action(command: str):
+    """
+    Mendeteksi apakah perintah pengguna mengandung intent aksi.
+    Returns: (action_name, result_string) jika aksi terdeteksi, atau None.
+    """
+    cmd = command.lower().strip()
+
+    # --- Buka Website (URL eksplisit) ---
+    url_match = re.search(r'buka\s+(https?://\S+)', cmd)
+    if url_match:
+        url = url_match.group(1)
+        result = open_website(url)
+        return ("open_website", result)
+
+    # --- Buka Website (domain langsung: buka google.com) ---
+    domain_match = re.search(r'buka\s+(\S+\.\S+)', cmd)
+    if domain_match:
+        url = domain_match.group(1)
+        result = open_website(url)
+        return ("open_website", result)
+
+    # --- Buka Website (nama populer: buka youtube) ---
+    for site_name, site_url in WEBSITE_MAP.items():
+        if re.search(rf'buka\s+{re.escape(site_name)}', cmd):
+            result = open_website(site_url)
+            return ("open_website", result)
+
+    # --- Buka Aplikasi ---
+    # Urutkan dari nama terpanjang dulu agar "vs code" cocok sebelum "code"
+    sorted_apps = sorted(APP_NAMES, key=len, reverse=True)
+    for app in sorted_apps:
+        if re.search(rf'buka\s+{re.escape(app)}', cmd):
+            app_key = APP_ALIAS.get(app, app)
+            result = open_application(app_key)
+            return ("open_application", result)
+
+    # --- Volume Control ---
+    vol_match = re.search(r'volume\s*(?:ke\s*)?(\d+)', cmd)
+    if vol_match:
+        level = int(vol_match.group(1))
+        result = set_volume(level)
+        return ("set_volume", result)
+
+    # Variasi: naikkan/turunkan volume
+    if re.search(r'(naikkan|besarkan|keraskan)\s*volume', cmd):
+        result = set_volume(80)
+        return ("set_volume", result)
+    if re.search(r'(turunkan|kecilkan|pelankan)\s*volume', cmd):
+        result = set_volume(30)
+        return ("set_volume", result)
+    if re.search(r'(mute|matikan)\s*volume', cmd) or re.search(r'volume\s*(mute|mati)', cmd):
+        result = set_volume(0)
+        return ("set_volume", result)
+
+    # --- Shutdown ---
+    if re.search(r'(matikan|shutdown|shut\s*down)\s*(komputer|pc|laptop)', cmd):
+        return ("shutdown", "__CONFIRM_SHUTDOWN__")
+
+    # --- Restart ---
+    if re.search(r'(restart|reboot)\s*(komputer|pc|laptop)?', cmd):
+        return ("restart", "__CONFIRM_RESTART__")
+
+    # --- Lock Screen ---
+    if re.search(r'(kunci|lock)\s*(layar|screen|pc|komputer|laptop)', cmd):
+        result = lock_screen()
+        return ("lock_screen", result)
+
+    # --- Baterai ---
+    if re.search(r'(baterai|battery|batere)', cmd):
+        result = get_battery_status()
+        return ("get_battery", result)
+
+    # --- System Info ---
+    if re.search(r'(info\s*sistem|system\s*info|ram|cpu|disk|spesifikasi|spek)', cmd):
+        result = get_system_info()
+        return ("get_system_info", result)
+
+    # --- Screenshot ---
+    if re.search(r'(screenshot|tangkapan\s*layar|screen\s*shot|screenshoot|ss)', cmd):
+        result = take_screenshot()
+        return ("take_screenshot", result)
+
+    # --- Cari File ---
+    file_match = re.search(r'cari\s+file\s+(.+)', cmd)
+    if file_match:
+        query = file_match.group(1).strip()
+        result = search_files(query)
+        return ("search_files", result)
+
+    # --- Cari Web / Berita ---
+    # Trigger berita eksplisit (harus di-cek SEBELUM regex 'cari' agar tidak miss)
+    if re.search(r'berita\s*(hari\s*ini|terbaru|terkini|update|pagi|siang|sore|malam)', cmd):
+        result = search_news()
+        return ("search_news", result)
+
+    if re.search(r'(apa|ada|gimana|bagaimana)\s*(berita|kabar)\s*(hari\s*ini|terbaru|terkini)?', cmd):
+        result = search_news()
+        return ("search_news", result)
+
+    if re.search(r'kabar\s*(terbaru|terkini|hari\s*ini)', cmd):
+        result = search_news()
+        return ("search_news", result)
+
+    # Cari berita spesifik: "berita tentang X", "berita X"
+    berita_match = re.search(r'berita\s+(?:tentang\s+)?(.+)', cmd)
+    if berita_match:
+        topic = berita_match.group(1).strip()
+        result = search_news(topic)
+        return ("search_news", result)
+
+    # Cari web general: "cari X", "carikan X", "googling X"
+    web_match = re.search(r'(?:cari(?:kan)?|search|googling)\s+(?:tentang\s+|info\s+|informasi\s+)?(.+)', cmd)
+    if web_match:
+        query = web_match.group(1).strip()
+        # Hindari false positive: jika sudah ditangani di atas (file, website)
+        if not query.startswith("file"):
+            # Cek apakah query mengandung kata berita → route ke search_news
+            if re.search(r'berita', query, re.IGNORECASE):
+                result = search_news(query)
+                return ("search_news", result)
+            result = search_web(query)
+            return ("search_web", result)
+
+    # --- Tidak ada aksi yang cocok ---
+    return None
 
 
 # =============================================
@@ -151,10 +337,10 @@ def _show_confirmation_dialog(action_type: str, ai_message: str):
 
 def run_command(command: str):
     """
-    Memproses perintah pengguna dengan arsitektur AI-First:
-    1. Cek apakah perintah adalah perintah kritis (exit/sleep) → eksekusi langsung.
-    2. Kirim semua perintah lain ke Ollama → AI memutuskan apakah perlu tool atau teks.
-    3. Jika AI mengembalikan marker konfirmasi, tampilkan dialog GUI.
+    Memproses perintah pengguna dengan arsitektur Hybrid:
+    1. Cek perintah kritis (exit/sleep) → eksekusi langsung.
+    2. Smart Router mendeteksi intent aksi → eksekusi langsung + AI buat respons.
+    3. Jika tidak ada aksi → kirim ke AI untuk percakapan biasa.
     """
     command_lower = command.lower().strip()
 
@@ -164,31 +350,63 @@ def run_command(command: str):
             action()
             return
 
-    # STEP 2: Kirim ke AI (Ollama akan memutuskan: tool call atau jawab biasa)
+    # STEP 2: Smart Router — deteksi aksi
+    action_result = detect_action(command)
+
+    if action_result:
+        action_name, result = action_result
+
+        # Handle aksi yang butuh konfirmasi GUI
+        if result == "__CONFIRM_SHUTDOWN__":
+            speak("Rofid, kamu yakin mau matikan komputer?")
+            if gui_state.window:
+                gui_state.window.after(0, _show_confirmation_dialog, "shutdown", "")
+            return
+
+        if result == "__CONFIRM_RESTART__":
+            speak("Rofid, kamu yakin mau restart komputer?")
+            if gui_state.window:
+                gui_state.window.after(0, _show_confirmation_dialog, "restart", "")
+            return
+
+        # Aksi sudah dieksekusi — minta AI buat respons natural
+        log_output(f"✅ Aksi '{action_name}' berhasil dijalankan.")
+
+        try:
+            # === HANDLING KHUSUS UNTUK BERITA ===
+            # Gunakan ask_ollama_detailed agar AI bisa menjelaskan berita secara lengkap
+            if action_name == "search_news":
+                context_msg = (
+                    f"[KONTEKS: Pengguna bertanya: '{command}']\n"
+                    f"[DATA BERITA YANG BERHASIL DITEMUKAN:]\n{result}\n\n"
+                    f"Berdasarkan data berita di atas, jelaskan berita PERTAMA/UTAMA secara lengkap dan detail kepada pengguna. "
+                    f"Sebutkan JUDUL beritanya, SUMBER media-nya, dan CANTUMKAN LINK-nya agar pengguna bisa membaca sendiri. "
+                    f"Jelaskan ISI beritanya dengan bahasa yang mudah dipahami - apa yang terjadi, siapa yang terlibat, kenapa itu penting. "
+                    f"Kalau ada berita lain yang menarik dari daftar, sebutkan juga judulnya secara singkat di akhir."
+                )
+                ai_reply = ask_ollama_detailed(context_msg)
+                speak(ai_reply)
+            else:
+                # === HANDLING AKSI BIASA ===
+                context_msg = (
+                    f"[KONTEKS SISTEM: Kamu baru saja menjalankan aksi '{action_name}' "
+                    f"atas permintaan pengguna: '{command}'. "
+                    f"Hasil aksinya: {result}. "
+                    f"Berikan konfirmasi singkat dan natural kepada pengguna (1-2 kalimat). "
+                    f"JANGAN bilang kamu akan melakukannya, karena SUDAH dilakukan.]"
+                )
+                ai_reply = ask_ollama_simple(context_msg)
+                speak(ai_reply)
+        except Exception:
+            # Fallback jika AI tidak bisa merespons
+            speak(result)
+        return
+
+    # STEP 3: Tidak ada aksi terdeteksi → kirim ke AI untuk percakapan biasa
     log_output("🧠 Milicia sedang berpikir...")
 
     try:
         ai_reply = ask_ollama(command)
-
-        # STEP 3: Cek apakah ada marker konfirmasi dari aksi berbahaya
-        if ai_reply.startswith("__CONFIRM_SHUTDOWN__|"):
-            message = ai_reply.split("|", 1)[1]
-            speak(message)
-            # Tampilkan dialog konfirmasi di main thread
-            if gui_state.window:
-                gui_state.window.after(0, _show_confirmation_dialog, "shutdown", message)
-            return
-
-        if ai_reply.startswith("__CONFIRM_RESTART__|"):
-            message = ai_reply.split("|", 1)[1]
-            speak(message)
-            # Tampilkan dialog konfirmasi di main thread
-            if gui_state.window:
-                gui_state.window.after(0, _show_confirmation_dialog, "restart", message)
-            return
-
-        # Respons biasa — ucapkan via TTS
         speak(ai_reply)
-
     except Exception as e:
         speak(f"Maaf, terjadi kesalahan: {str(e)}")

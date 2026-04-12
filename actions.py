@@ -6,11 +6,16 @@ Ollama akan memanggil fungsi-fungsi ini melalui mekanisme Tool Calling.
 """
 
 import os
+import re
 import subprocess
 import datetime
 import glob
 import json
 import ctypes
+import html as html_lib
+import xml.etree.ElementTree as ET
+import requests
+from urllib.parse import quote as url_quote
 
 from gui_utils import log_output
 
@@ -415,23 +420,30 @@ def lock_screen() -> str:
 def set_volume(level: int) -> str:
     """Mengatur volume sistem Windows."""
     try:
-        from comtypes import CLSCTX_ALL
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        import comtypes
+        from pycaw.pycaw import AudioUtilities
 
-        devices = AudioUtilities.GetSpeakers()
-        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = interface.QueryInterface(IAudioEndpointVolume)
+        # COM harus diinisialisasi di setiap thread yang menggunakannya
+        comtypes.CoInitialize()
 
-        # Konversi level (0-100) ke scalar (0.0-1.0)
-        clamped = max(0, min(100, level))
-        scalar = clamped / 100.0
-        volume.SetMasterVolumeLevelScalar(scalar, None)
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            # pycaw versi baru menggunakan property EndpointVolume
+            volume = devices.EndpointVolume
 
-        log_output(f"🔊 Volume diatur ke {clamped}%")
-        return f"Volume berhasil diatur ke {clamped}%."
+            # Konversi level (0-100) ke scalar (0.0-1.0)
+            clamped = max(0, min(100, level))
+            scalar = clamped / 100.0
+            volume.SetMasterVolumeLevelScalar(scalar, None)
+
+            log_output(f"🔊 Volume diatur ke {clamped}%")
+            return f"Volume berhasil diatur ke {clamped}%."
+        finally:
+            comtypes.CoUninitialize()
     except ImportError:
         return "Library pycaw belum terinstall. Jalankan: pip install pycaw comtypes"
     except Exception as e:
+        log_output(f"⚠️ Error set_volume: {e}")
         return f"Gagal mengatur volume: {str(e)}"
 
 
@@ -554,26 +566,276 @@ def search_web(query: str) -> str:
     try:
         from duckduckgo_search import DDGS
 
-        with DDGS() as ddgs:
+        ddgs = DDGS()
+
+        # Deteksi apakah user mencari berita
+        news_keywords = ["berita", "kabar", "headline", "terbaru", "terkini", "update", "news"]
+        is_news = any(kw in query.lower() for kw in news_keywords)
+
+        if is_news:
+            # Gunakan endpoint news untuk hasil berita yang lebih akurat
+            try:
+                results = list(ddgs.news(query, region="id-id", max_results=5))
+                search_type = "berita"
+            except Exception:
+                # Fallback ke text search jika news endpoint gagal
+                results = list(ddgs.text(query, region="id-id", max_results=5))
+                search_type = "pencarian"
+        else:
             results = list(ddgs.text(query, max_results=5))
+            search_type = "pencarian"
 
         if not results:
-            return f"Tidak ditemukan hasil pencarian untuk '{query}'."
+            return f"Tidak ditemukan hasil {search_type} untuk '{query}'."
 
         summary_parts = []
         for i, r in enumerate(results, 1):
             title = r.get("title", "")
-            body = r.get("body", "")
-            href = r.get("href", "")
-            summary_parts.append(f"{i}. {title}: {body} (Sumber: {href})")
+            body = r.get("body", r.get("excerpt", ""))
+            href = r.get("href", r.get("url", ""))
+            date = r.get("date", "")
+            source = r.get("source", "")
+
+            entry = f"{i}. {title}: {body}"
+            if date:
+                entry += f" ({date})"
+            if source:
+                entry += f" [Sumber: {source}]"
+            elif href:
+                entry += f" (Sumber: {href})"
+            summary_parts.append(entry)
 
         summary = "\n".join(summary_parts)
-        log_output(f"🔍 Web search: '{query}' — {len(results)} hasil")
-        return f"Hasil pencarian untuk '{query}':\n{summary}"
+        log_output(f"🔍 Web {search_type}: '{query}' — {len(results)} hasil")
+        return f"Hasil {search_type} untuk '{query}':\n{summary}"
     except ImportError:
-        return "Library duckduckgo-search belum terinstall. Jalankan: pip install duckduckgo-search"
+        return "Library duckduckgo_search belum terinstall. Jalankan: pip install duckduckgo_search"
     except Exception as e:
+        log_output(f"⚠️ Error search_web: {e}")
         return f"Gagal mencari di web: {str(e)}"
+
+
+def search_news(query: str = None) -> str:
+    """
+    Mencari berita terbaru menggunakan Google News RSS.
+    Mengambil artikel nyata dengan judul, sumber, tanggal, dan link.
+    Juga mencoba mengekstrak isi konten artikel utama agar AI bisa menjelaskan.
+    """
+    try:
+        # Build Google News RSS URL
+        if query and query.strip():
+            # Bersihkan query dari kata-kata trigger yang redundan
+            clean_query = re.sub(
+                r'\b(carikan|cari|tolong|dong|ya|hari ini|terbaru|terkini|update)\b',
+                '', query, flags=re.IGNORECASE
+            ).strip()
+            if not clean_query:
+                clean_query = "Indonesia"
+            encoded = url_quote(clean_query)
+            rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=id&gl=ID&ceid=ID:id"
+        else:
+            # Headline utama Indonesia
+            rss_url = "https://news.google.com/rss?hl=id&gl=ID&ceid=ID:id"
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+
+        response = requests.get(rss_url, timeout=15, headers=headers)
+
+        if response.status_code != 200:
+            log_output(f"⚠️ Google News RSS gagal (status {response.status_code}), fallback ke DuckDuckGo...")
+            return _search_news_ddg(query or "berita terbaru Indonesia")
+
+        root = ET.fromstring(response.content)
+        items = root.findall('.//item')
+
+        if not items:
+            log_output("⚠️ Google News RSS kosong, fallback ke DuckDuckGo...")
+            return _search_news_ddg(query or "berita terbaru Indonesia")
+
+        # Ambil 3 artikel teratas
+        articles = []
+        for item in items[:3]:
+            title_el = item.find('title')
+            link_el = item.find('link')
+            pub_date_el = item.find('pubDate')
+            source_el = item.find('source')
+            desc_el = item.find('description')
+
+            title = title_el.text if title_el is not None else "Tanpa judul"
+            google_link = link_el.text if link_el is not None else ""
+            pub_date = pub_date_el.text if pub_date_el is not None else ""
+            source = source_el.text if source_el is not None else ""
+            description = desc_el.text if desc_el is not None else ""
+
+            # Ambil URL sumber asli dari atribut <source url="...">
+            source_url = ""
+            if source_el is not None:
+                source_url = source_el.get('url', '')
+
+            # Bersihkan HTML dari description RSS
+            if description:
+                description = re.sub(r'<[^>]+>', '', description)
+                description = html_lib.unescape(description)
+
+            # Gunakan source_url jika ada, otherwise google_link
+            article_link = source_url if source_url else google_link
+
+            articles.append({
+                'title': title,
+                'link': article_link,
+                'google_link': google_link,
+                'date': pub_date,
+                'source': source,
+                'description': description
+            })
+
+        # Coba scrape isi konten dari artikel pertama agar AI bisa menjelaskan
+        article_content = ""
+        if articles and articles[0].get('google_link'):
+            # Coba scrape via Google redirect link (bisa resolve ke artikel asli)
+            article_content, resolved_url = _try_extract_article(articles[0]['google_link'])
+            if resolved_url and 'news.google.com' not in resolved_url:
+                # Berhasil resolve ke URL artikel asli
+                articles[0]['link'] = resolved_url
+
+        # Format hasil untuk dikirim ke AI
+        result_parts = []
+        for i, art in enumerate(articles, 1):
+            entry = f"=== BERITA {i} ===\n"
+            entry += f"Judul: {art['title']}\n"
+            if art['source']:
+                entry += f"Sumber: {art['source']}\n"
+            if art['date']:
+                entry += f"Tanggal: {art['date']}\n"
+            entry += f"Link: {art['link']}\n"
+            if art['description']:
+                entry += f"Ringkasan: {art['description']}\n"
+
+            # Tambahkan isi lengkap hanya untuk artikel pertama
+            if i == 1 and article_content:
+                entry += f"\nISI ARTIKEL LENGKAP:\n{article_content}\n"
+
+            result_parts.append(entry)
+
+        result = "\n".join(result_parts)
+        log_output(f"📰 Berita ditemukan: {len(articles)} artikel")
+        return f"BERITA TERBARU ({len(articles)} artikel):\n\n{result}"
+
+    except Exception as e:
+        log_output(f"⚠️ Error search_news: {e}")
+        # Fallback ke DuckDuckGo
+        try:
+            return _search_news_ddg(query or "berita terbaru Indonesia")
+        except Exception:
+            return f"Gagal mencari berita: {str(e)}"
+
+
+def _try_extract_article(url: str) -> tuple:
+    """
+    Mencoba mengekstrak isi artikel dari URL berita.
+    Google News RSS link akan di-redirect ke URL asli artikel.
+    Returns: (content_text, actual_url)
+    """
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8'
+        }
+        resp = requests.get(url, timeout=12, headers=headers, allow_redirects=True)
+        actual_url = resp.url  # URL setelah redirect (URL asli artikel)
+        page_html = resp.text
+
+        content_parts = []
+
+        # 1. Coba ambil og:description (biasanya ringkasan bagus)
+        og_match = re.search(
+            r'<meta[^>]*property=["\']og:description["\'][^>]*content=["\']([^"\'>]*)["\']',
+            page_html, re.IGNORECASE
+        )
+        if not og_match:
+            # Coba format alternatif (content sebelum property)
+            og_match = re.search(
+                r'<meta[^>]*content=["\']([^"\'>]*)["\'][^>]*property=["\']og:description["\']',
+                page_html, re.IGNORECASE
+            )
+        if og_match:
+            og_desc = html_lib.unescape(og_match.group(1).strip())
+            if len(og_desc) > 30:
+                content_parts.append(og_desc)
+
+        # 2. Ambil meta description sebagai fallback
+        if not content_parts:
+            meta_match = re.search(
+                r'<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\'>]*)["\']',
+                page_html, re.IGNORECASE
+            )
+            if meta_match:
+                meta_desc = html_lib.unescape(meta_match.group(1).strip())
+                if len(meta_desc) > 30:
+                    content_parts.append(meta_desc)
+
+        # 3. Ekstraksi paragraf <p> dari artikel
+        #    Hanya ambil paragraf yang cukup panjang (isi artikel, bukan navigasi)
+        paragraphs = re.findall(r'<p[^>]*>(.*?)</p>', page_html, re.DOTALL)
+        para_count = 0
+        for p in paragraphs:
+            clean = re.sub(r'<[^>]+>', '', p).strip()
+            clean = html_lib.unescape(clean)
+            # Filter: hanya paragraf substansial (>80 karakter, bukan menu/nav)
+            if len(clean) > 80 and not re.match(r'^(Baca juga|BACA JUGA|Lihat juga|Tags?:|Sumber:)', clean):
+                content_parts.append(clean)
+                para_count += 1
+                if para_count >= 8:  # Maks 8 paragraf
+                    break
+
+        if content_parts:
+            return '\n\n'.join(content_parts), actual_url
+        return "", actual_url
+
+    except Exception as e:
+        log_output(f"⚠️ Gagal scrape artikel: {e}")
+        return "", ""
+
+
+def _search_news_ddg(query: str) -> str:
+    """Fallback: Mencari berita menggunakan DuckDuckGo News."""
+    try:
+        from duckduckgo_search import DDGS
+        ddgs = DDGS()
+
+        try:
+            results = list(ddgs.news(query, region="id-id", max_results=5))
+        except Exception:
+            results = list(ddgs.text(query, region="id-id", max_results=5))
+
+        if not results:
+            return f"Tidak ditemukan berita untuk '{query}'."
+
+        summary_parts = []
+        for i, r in enumerate(results, 1):
+            title = r.get("title", "")
+            body = r.get("body", r.get("excerpt", ""))
+            href = r.get("href", r.get("url", ""))
+            date = r.get("date", "")
+            source = r.get("source", "")
+
+            entry = f"{i}. {title}: {body}"
+            if date:
+                entry += f" ({date})"
+            if source:
+                entry += f" [Sumber: {source}]"
+            elif href:
+                entry += f" (Link: {href})"
+            summary_parts.append(entry)
+
+        return f"Berita terbaru:\n" + "\n".join(summary_parts)
+    except Exception as e:
+        return f"Gagal mencari berita: {str(e)}"
 
 
 def open_file(file_path: str) -> str:
@@ -606,6 +868,7 @@ ACTION_MAP = {
     "take_screenshot": take_screenshot,
     "search_files": search_files,
     "search_web": search_web,
+    "search_news": search_news,
     "open_file": open_file,
 }
 
@@ -626,6 +889,8 @@ def execute_action(function_name: str, arguments: dict) -> str:
         result = action_fn(**arguments)
         return result
     except TypeError as e:
+        log_output(f"⚠️ TypeError pada {function_name}: {e}")
         return f"Argumen tidak valid untuk aksi '{function_name}': {str(e)}"
     except Exception as e:
+        log_output(f"⚠️ Exception pada {function_name}: {e}")
         return f"Gagal menjalankan aksi '{function_name}': {str(e)}"

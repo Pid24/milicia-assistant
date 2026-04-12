@@ -11,6 +11,7 @@ import requests
 import json
 import datetime
 import prayer_times
+from prayer_times import get_prayer_schedule
 from actions import TOOL_DEFINITIONS, execute_action
 from gui_utils import log_output
 
@@ -33,9 +34,15 @@ Aturan penting:
 - Gunakan emoji sesekali untuk membuat percakapan lebih hidup.
 - Jika pengguna meminta kamu melakukan sesuatu yang bisa dilakukan dengan tools, GUNAKAN TOOLS YANG TERSEDIA. Jangan hanya bilang kamu akan melakukannya, LAKUKAN langsung.
 - Jika pengguna meminta membuka aplikasi atau website, gunakan tool yang sesuai.
+- Jika pengguna bertanya tentang berita, informasi terkini, atau hal yang membutuhkan data real-time, SELALU gunakan tool search_web. JANGAN menjawab tanpa mencari terlebih dahulu.
 - Panggil pengguna dengan nama "Rofid" atau "kak" sesekali.
 - Kamu BUKAN chatbot biasa. Kamu adalah asisten pribadi seperti Jarvis dari Iron Man.
 - Setelah menjalankan tool, berikan konfirmasi singkat dan natural kepada pengguna.
+- DILARANG KERAS menggunakan kata-kata kasar, vulgar, tidak sopan, atau kata makian dalam bahasa apapun. Kamu harus selalu sopan, profesional, dan ramah.
+- Gunakan bahasa yang bersih dan pantas untuk semua umur.
+- Kamu paham tentang jadwal sholat Islam. Ada 5 waktu sholat wajib: Subuh, Dzuhur, Ashar, Maghrib, dan Isya.
+- Pada hari JUMAT, sholat Dzuhur digantikan oleh SHOLAT JUMAT yang wajib bagi laki-laki Muslim. Sholat Jumat dilaksanakan berjamaah di masjid dan didahului oleh khutbah Jumat.
+- Jika pengguna bertanya tentang jadwal sholat atau waktu sholat, jawab berdasarkan data jadwal yang diberikan di konteks sistem.
 """
 
 # Riwayat percakapan (memori jangka pendek)
@@ -78,10 +85,17 @@ def ask_ollama(user_message: str) -> str:
     now = datetime.datetime.now()
     informasi_tambahan = f"\n\n[INFO SISTEM: Saat ini tanggal {now.strftime('%d-%m-%Y')} dan waktu menunjukkan tepat jam {now.strftime('%H:%M')}."
 
-    if prayer_times.cached_prayer_times:
-        prayer_info = ", ".join(f"{k}: {v}" for k, v in prayer_times.cached_prayer_times.items())
+    schedule = get_prayer_schedule()
+    if schedule:
+        prayer_info = ", ".join(f"{k}: {v}" for k, v in schedule.items())
         city = prayer_times.user_location.get('city', 'wilayah mu')
-        informasi_tambahan += f" Jadwal waktu sholat hari ini untuk {city}: {prayer_info}.]"
+        day_name = now.strftime("%A")
+        hari_map = {"Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu", "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu"}
+        hari = hari_map.get(day_name, day_name)
+        informasi_tambahan += f" Hari ini hari {hari}. Jadwal waktu sholat hari ini untuk {city}: {prayer_info}."
+        if hari == "Jumat":
+            informasi_tambahan += " CATATAN: Hari ini JUMAT, sholat Dzuhur digantikan oleh Sholat Jumat yang wajib berjamaah di masjid."
+        informasi_tambahan += "]"
     else:
         informasi_tambahan += "]"
 
@@ -197,7 +211,29 @@ def ask_ollama(user_message: str) -> str:
             ai_reply = assistant_message.get("content", "").strip()
 
             if not ai_reply:
-                ai_reply = "Hmm, aku tidak bisa berpikir sekarang. Coba lagi ya."
+                # Model mungkin bingung karena ada tool definitions.
+                # Retry TANPA tools agar model bisa menjawab dengan teks biasa.
+                log_output("🔄 Respons kosong, mencoba ulang tanpa tools...")
+                retry_response = requests.post(
+                    OLLAMA_URL,
+                    json={
+                        "model": MODEL_NAME,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.7,
+                            "top_p": 0.9,
+                            "num_predict": 512,
+                        }
+                    },
+                    timeout=120
+                )
+                if retry_response.status_code == 200:
+                    retry_data = retry_response.json()
+                    ai_reply = retry_data.get("message", {}).get("content", "").strip()
+
+                if not ai_reply:
+                    ai_reply = "Hmm, aku tidak bisa berpikir sekarang. Coba lagi ya."
 
             # Simpan balasan AI ke riwayat
             conversation_history.append({
@@ -213,6 +249,77 @@ def ask_ollama(user_message: str) -> str:
         return "Otak AI ku butuh waktu terlalu lama untuk berpikir. Coba tanya yang lebih singkat ya."
     except Exception as e:
         return f"Terjadi kesalahan: {str(e)}"
+
+def ask_ollama_simple(message: str) -> str:
+    """
+    Versi ringan: Kirim pesan ke Ollama TANPA tools.
+    Digunakan untuk menghasilkan respons natural setelah aksi dieksekusi.
+    Tidak menyimpan ke conversation_history.
+    """
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": message}
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "num_predict": 128,
+                }
+            },
+            timeout=60
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            reply = data.get("message", {}).get("content", "").strip()
+            return reply if reply else "Sudah kujalankan, Rofid."
+        else:
+            return "Sudah kujalankan, Rofid."
+
+    except Exception:
+        return "Sudah kujalankan, Rofid."
+
+
+def ask_ollama_detailed(message: str) -> str:
+    """
+    Versi detail: Kirim pesan ke Ollama untuk respons panjang dan terstruktur.
+    Digunakan untuk menjelaskan berita, analisis, dan konten yang butuh elaborasi.
+    Token lebih banyak (1024) dan temperature lebih rendah untuk akurasi faktual.
+    """
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL_NAME,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": message}
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.5,
+                    "top_p": 0.9,
+                    "num_predict": 1024,
+                }
+            },
+            timeout=120
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            reply = data.get("message", {}).get("content", "").strip()
+            return reply if reply else "Maaf, aku gagal merangkai penjelasan beritanya."
+        else:
+            return "Maaf, aku gagal merangkai penjelasan beritanya."
+
+    except Exception:
+        return "Maaf, aku tidak bisa menjelaskan beritanya sekarang."
 
 
 def is_ollama_running() -> bool:

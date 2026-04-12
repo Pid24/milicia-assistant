@@ -13,6 +13,9 @@ PRAYER_NAMES_MAP = {
     "Isha": "Isya"
 }
 
+# Menit sebelum Dzuhur untuk pengingat Jumat (persiapan sholat Jumat)
+JUMAT_REMINDER_MINUTES_BEFORE = 15
+
 cached_prayer_times = {}
 last_fetch_date = None
 user_location = {"city": "Unknown", "country": "Unknown"}
@@ -60,6 +63,51 @@ def fetch_prayer_times():
     except Exception as e:
         log_output(f"⚠️ Gagal mengambil jadwal sholat: {e}")
 
+
+def _is_friday(date=None):
+    """Cek apakah hari ini Jumat (weekday 4)."""
+    if date is None:
+        date = datetime.datetime.now()
+    return date.weekday() == 4
+
+
+def _get_jumat_reminder_time():
+    """
+    Hitung waktu pengingat Jumat = waktu Dzuhur - JUMAT_REMINDER_MINUTES_BEFORE menit.
+    Memberikan waktu buat persiapan sebelum sholat Jumat.
+    """
+    dzuhur_str = cached_prayer_times.get("Dzuhur")
+    if not dzuhur_str:
+        return None
+    try:
+        h, m = map(int, dzuhur_str.split(":"))
+        dzuhur_dt = datetime.datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
+        reminder_dt = dzuhur_dt - datetime.timedelta(minutes=JUMAT_REMINDER_MINUTES_BEFORE)
+        return reminder_dt.strftime("%H:%M")
+    except (ValueError, TypeError):
+        return None
+
+
+def get_prayer_schedule():
+    """
+    Mengembalikan jadwal sholat hari ini dengan awareness hari Jumat.
+    Pada hari Jumat, Dzuhur diganti dengan label 'Jumat' dalam output.
+    Digunakan oleh ollama_brain.py untuk konteks AI.
+    """
+    if not cached_prayer_times:
+        return {}
+
+    schedule = dict(cached_prayer_times)
+
+    if _is_friday():
+        # Pada hari Jumat, ganti label Dzuhur → Jumat
+        dzuhur_time = schedule.pop("Dzuhur", None)
+        if dzuhur_time:
+            schedule["Jumat"] = dzuhur_time
+
+    return schedule
+
+
 def prayer_time_daemon():
     """Loop utama untuk daemon sholat berjalan di background."""
     global cached_prayer_times, last_fetch_date, user_location
@@ -81,13 +129,37 @@ def prayer_time_daemon():
             notified_prayers.clear()
 
         current_hm = now.strftime("%H:%M")
+        city = user_location["city"]
+        is_jumat = _is_friday(now)
 
-        # Cek apakah waktu saat ini ada di jadwal sholat
+        # === Pengingat Sholat Jumat (khusus hari Jumat) ===
+        if is_jumat and "Jumat_reminder" not in notified_prayers:
+            jumat_reminder = _get_jumat_reminder_time()
+            if jumat_reminder and current_hm == jumat_reminder:
+                speak(
+                    f"Assalamu'alaikum Rofid! Sebentar lagi masuk waktu Sholat Jumat "
+                    f"untuk wilayah {city} dan sekitarnya. "
+                    f"Yuk segera bersiap-siap berangkat ke masjid. "
+                    f"Jangan lupa mandi, pakai baju rapi, dan berangkat lebih awal ya!"
+                )
+                notified_prayers.add("Jumat_reminder")
+
+        # === Pengingat Sholat Wajib Reguler ===
         for sholat, time_str in cached_prayer_times.items():
             if current_hm == time_str and sholat not in notified_prayers:
-                city = user_location["city"]
-                speak(f"Rofid, sudah masuk waktu sholat {sholat} untuk wilayah {city} dan sekitarnya. Jangan lupa untuk sholat.")
-                notified_prayers.add(sholat)
+                # Pada hari Jumat, Dzuhur diganti dengan pesan Jumat
+                if is_jumat and sholat == "Dzuhur":
+                    speak(
+                        f"Rofid, sudah masuk waktu Sholat Jumat untuk wilayah {city} "
+                        f"dan sekitarnya. Semoga khutbah dan sholatnya khusyuk!"
+                    )
+                    notified_prayers.add(sholat)
+                else:
+                    speak(
+                        f"Rofid, sudah masuk waktu sholat {sholat} untuk wilayah {city} "
+                        f"dan sekitarnya. Jangan lupa untuk sholat."
+                    )
+                    notified_prayers.add(sholat)
         
         # Cek setiap 30 detik agar tidak lolos 1 menit tersebut
         time.sleep(30)
