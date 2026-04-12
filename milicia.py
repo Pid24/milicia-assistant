@@ -164,7 +164,7 @@ ollama_label.pack(side="left", padx=15, pady=8)
 
 model_label = ctk.CTkLabel(
     status_frame, 
-    text="qwen2.5:1.5b",
+    text="qwen2.5:3b ⚡ Agentic",
     font=("Segoe UI", 11, "italic"),
     text_color=TEXT_MUTED
 )
