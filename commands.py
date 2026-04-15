@@ -17,7 +17,7 @@ from utils import speak, speak_natural
 from gui_utils import log_output
 from gui_state import window
 import gui_state
-from ollama_brain import ask_ollama, ask_ollama_simple, ask_ollama_detailed
+from brain import ask_ai, ask_ai_simple, ask_ai_detailed, add_to_history
 from actions import (
     open_website, open_application, shutdown_computer, restart_computer,
     lock_screen, set_volume, get_battery_status, get_system_info,
@@ -177,68 +177,8 @@ def detect_action(command: str):
         result = lock_screen()
         return ("lock_screen", result)
 
-    # --- Baterai ---
-    if re.search(r'(baterai|battery|batere)', cmd):
-        result = get_battery_status()
-        return ("get_battery", result)
-
-    # --- System Info ---
-    if re.search(r'(info\s*sistem|system\s*info|ram|cpu|disk|spesifikasi|spek)', cmd):
-        result = get_system_info()
-        return ("get_system_info", result)
-
-    # --- Screenshot ---
-    if re.search(r'(screenshot|tangkapan\s*layar|screen\s*shot|screenshoot|ss)', cmd):
-        result = take_screenshot()
-        return ("take_screenshot", result)
-
-    # --- Vision / Mata Cloud ---
-    if re.search(r'(lihat|jelaskan|analisa|baca|cek)\s*(layar|screen|wallpaper|gambar|ini|kode|koding|error|kodingan|aplikasi)', cmd):
-        result = analyze_screen(cmd)
-        return ("analyze_screen", result)
-
-    # --- Cari File ---
-    file_match = re.search(r'cari\s+file\s+(.+)', cmd)
-    if file_match:
-        query = file_match.group(1).strip()
-        result = search_files(query)
-        return ("search_files", result)
-
-    # --- Cari Web / Berita ---
-    # Trigger berita eksplisit (harus di-cek SEBELUM regex 'cari' agar tidak miss)
-    if re.search(r'berita\s*(hari\s*ini|terbaru|terkini|update|pagi|siang|sore|malam)', cmd):
-        result = search_news()
-        return ("search_news", result)
-
-    if re.search(r'(apa|ada|gimana|bagaimana)\s*(berita|kabar)\s*(hari\s*ini|terbaru|terkini)?', cmd):
-        result = search_news()
-        return ("search_news", result)
-
-    if re.search(r'kabar\s*(terbaru|terkini|hari\s*ini)', cmd):
-        result = search_news()
-        return ("search_news", result)
-
-    # Cari berita spesifik: "berita tentang X", "berita X"
-    berita_match = re.search(r'berita\s+(?:tentang\s+)?(.+)', cmd)
-    if berita_match:
-        topic = berita_match.group(1).strip()
-        result = search_news(topic)
-        return ("search_news", result)
-
-    # Cari web general: "cari X", "carikan X", "googling X"
-    web_match = re.search(r'(?:cari(?:kan)?|search|googling)\s+(?:tentang\s+|info\s+|informasi\s+)?(.+)', cmd)
-    if web_match:
-        query = web_match.group(1).strip()
-        # Hindari false positive: jika sudah ditangani di atas (file, website)
-        if not query.startswith("file"):
-            # Cek apakah query mengandung kata berita → route ke search_news
-            if re.search(r'berita', query, re.IGNORECASE):
-                result = search_news(query)
-                return ("search_news", result)
-            result = search_web(query)
-            return ("search_web", result)
-
-    # --- Tidak ada aksi yang cocok ---
+    # Aksi-aksi kognitif dan informasi dinamis (web search, berita, baterai, dll)
+    # akan diteruskan ke Gemini agar bisa dikelola via Tool Calling asli.
     return None
 
 
@@ -378,38 +318,16 @@ def run_command(command: str):
         log_output(f"✅ Aksi '{action_name}' berhasil dijalankan.")
 
         try:
-            # === HANDLING KHUSUS UNTUK BERITA ===
-            # Gunakan ask_ollama_detailed agar AI bisa menjelaskan berita secara lengkap
-            if action_name == "search_news":
-                context_msg = (
-                    f"[KONTEKS: Pengguna bertanya: '{command}']\n"
-                    f"[DATA BERITA YANG BERHASIL DITEMUKAN:]\n{result}\n\n"
-                    f"Berdasarkan data berita di atas, jelaskan berita PERTAMA/UTAMA secara lengkap dan detail kepada pengguna. "
-                    f"Sebutkan JUDUL beritanya, SUMBER media-nya, dan CANTUMKAN LINK-nya agar pengguna bisa membaca sendiri. "
-                    f"Jelaskan ISI beritanya dengan bahasa yang mudah dipahami - apa yang terjadi, siapa yang terlibat, kenapa itu penting. "
-                    f"Kalau ada berita lain yang menarik dari daftar, sebutkan juga judulnya secara singkat di akhir."
-                )
-                ai_reply = ask_ollama_detailed(context_msg)
-                speak(ai_reply)
-            elif action_name == "analyze_screen":
-                # Langsung bacakan hasil dari Gemini agar Qwen tidak halusinasi
-                # dan tambahkan ke memori jangka pendek Ollama
-                from ollama_brain import conversation_history
-                conversation_history.append({"role": "user", "content": command})
-                conversation_history.append({"role": "assistant", "content": result})
-                
-                speak(result)
-            else:
-                # === HANDLING AKSI BIASA ===
-                context_msg = (
-                    f"[KONTEKS SISTEM: Kamu baru saja menjalankan aksi '{action_name}' "
-                    f"atas permintaan pengguna: '{command}'. "
-                    f"Hasil aksinya: {result}. "
-                    f"Berikan konfirmasi singkat dan natural kepada pengguna (1-2 kalimat). "
-                    f"JANGAN bilang kamu akan melakukannya, karena SUDAH dilakukan.]"
-                )
-                ai_reply = ask_ollama_simple(context_msg)
-                speak(ai_reply)
+            # === HANDLING AKSI BIASA ===
+            context_msg = (
+                f"[KONTEKS SISTEM: Kamu baru saja menjalankan aksi '{action_name}' "
+                f"atas permintaan pengguna: '{command}'. "
+                f"Hasil aksinya: {result}. "
+                f"Berikan konfirmasi singkat dan natural kepada pengguna (1-2 kalimat). "
+                f"JANGAN bilang kamu akan melakukannya, karena SUDAH dilakukan.]"
+            )
+            ai_reply = ask_ai_simple(context_msg)
+            speak(ai_reply)
         except Exception:
             # Fallback jika AI tidak bisa merespons
             speak(result)
@@ -419,7 +337,7 @@ def run_command(command: str):
     log_output("🧠 Milicia sedang berpikir...")
 
     try:
-        ai_reply = ask_ollama(command)
+        ai_reply = ask_ai(command)
         speak(ai_reply)
     except Exception as e:
         speak(f"Maaf, terjadi kesalahan: {str(e)}")

@@ -31,7 +31,7 @@ except Exception:
     pass
 
 import gui_state
-from ollama_brain import is_ollama_running, reset_history
+from brain import is_ai_running, reset_history
 from utils import speak, get_time_greeting
 
 USER_DATA_FILE = "user_data.json"
@@ -406,24 +406,24 @@ def _update_visualizer():
 # ─────────────────────────────────────────────
 # STATUS BADGES (below visualizer)
 # ─────────────────────────────────────────────
-ollama_active = is_ollama_running()
+ai_active = is_ai_running()
 
 badge_frame = tk.Frame(left_panel, bg=BG_COLOR)
 badge_frame.pack(fill="x", pady=(0, 8))
 
-_status_dot_color = "#2ecc71" if ollama_active else "#e74c3c"
-_status_text      = "ONLINE" if ollama_active else "OFFLINE"
+_status_dot_color = "#2ecc71" if ai_active else "#e74c3c"
+_status_text      = "ONLINE" if ai_active else "OFFLINE"
 
 tk.Label(
     badge_frame,
-    text=f"◉ OLLAMA: {_status_text}",
+    text=f"◉ GEMINI: {_status_text}",
     bg=BG_COLOR, fg=_status_dot_color,
     font=("Courier New", 9, "bold")
 ).pack(side="left", padx=4)
 
 tk.Label(
     badge_frame,
-    text="⚡ qwen2.5:3b",
+    text="⚡ gemini-2.0-flash",
     bg=BG_COLOR, fg=TEXT_MUTED,
     font=("Courier New", 9)
 ).pack(side="right", padx=4)
@@ -799,12 +799,12 @@ def _startup_log():
     time.sleep(0.3)
     log_output("◈ Loading JARVIS core modules... OK")
     time.sleep(0.2)
-    log_output("◈ Connecting to Ollama AI brain...")
+    log_output("◈ Connecting to Gemini Cloud AI brain...")
     time.sleep(0.2)
-    if ollama_active:
-        log_output("✅ OLLAMA AI Engine: ONLINE")
+    if ai_active:
+        log_output("✅ GEMINI AI Engine: ONLINE")
     else:
-        log_output("⚠️ OLLAMA AI Engine: OFFLINE — pastikan Ollama berjalan!")
+        log_output("⚠️ GEMINI AI Engine: OFFLINE — periksa API key di user_data.json!")
     time.sleep(0.1)
     log_output("◈ Prayer time daemon: RUNNING")
     log_output("◈ Wake-word listener: ARMED")
@@ -818,7 +818,7 @@ if "--background" in sys.argv:
     hide_window()
     gui_state.handsfree_switch.select()
 
-if ollama_active:
+if ai_active:
     time_greeting = get_time_greeting()
     threading.Thread(
         target=speak,

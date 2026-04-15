@@ -595,6 +595,9 @@ def search_files(query: str) -> str:
             os.path.join(home, "Downloads"),
         ]
 
+        import re
+        query = re.sub(r'\b(folder|file|dokumen|direktori)\b', '', query, flags=re.IGNORECASE).strip()
+
         # Jika query belum punya wildcard, tambahkan
         if "*" not in query:
             pattern = f"*{query}*"
@@ -622,7 +625,7 @@ def search_files(query: str) -> str:
 def search_web(query: str) -> str:
     """Mencari informasi di internet menggunakan DuckDuckGo."""
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
 
         ddgs = DDGS()
 
@@ -667,7 +670,7 @@ def search_web(query: str) -> str:
         log_output(f"🔍 Web {search_type}: '{query}' — {len(results)} hasil")
         return f"Hasil {search_type} untuk '{query}':\n{summary}"
     except ImportError:
-        return "Library duckduckgo_search belum terinstall. Jalankan: pip install duckduckgo_search"
+        return "Library ddgs belum terinstall. Jalankan: pip install ddgs"
     except Exception as e:
         log_output(f"⚠️ Error search_web: {e}")
         return f"Gagal mencari di web: {str(e)}"
@@ -863,7 +866,7 @@ def _try_extract_article(url: str) -> tuple:
 def _search_news_ddg(query: str) -> str:
     """Fallback: Mencari berita menggunakan DuckDuckGo News."""
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         ddgs = DDGS()
 
         try:
