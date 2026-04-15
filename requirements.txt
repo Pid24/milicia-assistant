@@ -12,3 +12,4 @@ psutil>=5.9.0
 pycaw>=20230407
 comtypes>=1.2.0
 duckduckgo_search>=6.0.0
+google-generativeai>=0.4.0

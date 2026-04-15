@@ -199,6 +199,23 @@ TOOL_DEFINITIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_screen",
+            "description": "Menganalisis isi layar di komputer. Gunakan alat ini JIKA pengguna menyuruhmu melihat layar, memperbaiki error kode di layar, atau menjelaskan apa yang ada di layar/screenshot komputernya saat ini.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Pertanyaan atau instruksi pengguna tentang gambar di layar."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
 ]
 
 
@@ -525,6 +542,47 @@ def take_screenshot() -> str:
         return f"Screenshot berhasil disimpan di Desktop dengan nama screenshot_{timestamp}.png"
     except Exception as e:
         return f"Gagal mengambil screenshot: {str(e)}"
+
+
+def analyze_screen(query: str) -> str:
+    """Mengambil screenshot dan mengirimkannya ke API Gemini untuk dianalisis."""
+    try:
+        import json
+        import os
+        from PIL import ImageGrab
+        import google.generativeai as genai
+        
+        # Ambil API key
+        api_key = None
+        if os.path.exists("user_data.json"):
+            with open("user_data.json", "r") as f:
+                data = json.load(f)
+                api_key = data.get("gemini_api_key")
+                
+        if not api_key:
+            return "Kunci API Gemini (gemini_api_key) tidak ditemukan di user_data.json. Mohon tambahkan terlebih dahulu agar fitur Vision berfungsi."
+            
+        # Konfigurasi Gemini
+        genai.configure(api_key=api_key)
+        # Gunakan model terbaru untuk Vision cepat
+        model = genai.GenerativeModel('gemini-flash-latest')
+        
+        # Ambil gambar
+        log_output("📸 Mengambil *screenshot* untuk dianalisa...")
+        screenshot = ImageGrab.grab()
+        
+        # Kirim ke Gemini
+        log_output("👁️ Mata cloud sedang menganalisis layar...")
+        response = model.generate_content([query, screenshot])
+        
+        result_text = response.text.replace('\n', ' ')
+        log_output(f"✅ Analisis selesai!")
+        return "Insight dari layar: " + response.text
+        
+    except ImportError:
+         return "Library google-generativeai belum terinstall."
+    except Exception as e:
+         return f"Terjadi kesalahan saat menganalisa layar: {str(e)}"
 
 
 def search_files(query: str) -> str:
@@ -870,6 +928,7 @@ ACTION_MAP = {
     "search_web": search_web,
     "search_news": search_news,
     "open_file": open_file,
+    "analyze_screen": analyze_screen,
 }
 
 

@@ -22,7 +22,7 @@ from actions import (
     open_website, open_application, shutdown_computer, restart_computer,
     lock_screen, set_volume, get_battery_status, get_system_info,
     take_screenshot, search_files, search_web, search_news, open_file,
-    _execute_shutdown, _execute_restart
+    _execute_shutdown, _execute_restart, analyze_screen
 )
 
 
@@ -191,6 +191,11 @@ def detect_action(command: str):
     if re.search(r'(screenshot|tangkapan\s*layar|screen\s*shot|screenshoot|ss)', cmd):
         result = take_screenshot()
         return ("take_screenshot", result)
+
+    # --- Vision / Mata Cloud ---
+    if re.search(r'(lihat|jelaskan|analisa|baca|cek)\s*(layar|screen|wallpaper|gambar|ini|kode|koding|error|kodingan|aplikasi)', cmd):
+        result = analyze_screen(cmd)
+        return ("analyze_screen", result)
 
     # --- Cari File ---
     file_match = re.search(r'cari\s+file\s+(.+)', cmd)
@@ -386,6 +391,14 @@ def run_command(command: str):
                 )
                 ai_reply = ask_ollama_detailed(context_msg)
                 speak(ai_reply)
+            elif action_name == "analyze_screen":
+                # Langsung bacakan hasil dari Gemini agar Qwen tidak halusinasi
+                # dan tambahkan ke memori jangka pendek Ollama
+                from ollama_brain import conversation_history
+                conversation_history.append({"role": "user", "content": command})
+                conversation_history.append({"role": "assistant", "content": result})
+                
+                speak(result)
             else:
                 # === HANDLING AKSI BIASA ===
                 context_msg = (

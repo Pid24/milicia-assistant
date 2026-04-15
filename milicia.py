@@ -44,8 +44,16 @@ def get_user_name():
     return "pengguna"
 
 def set_user_name(name):
+    data = {}
+    if os.path.exists(USER_DATA_FILE):
+        with open(USER_DATA_FILE, "r") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                pass
+    data["name"] = name
     with open(USER_DATA_FILE, "w") as f:
-        json.dump({"name": name}, f)
+        json.dump(data, f)
 
 set_user_name("Rofid")
 user = get_user_name()
