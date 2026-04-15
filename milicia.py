@@ -1,5 +1,5 @@
 """
-Milicia AI Assistant — Sci-Fi JARVIS GUI
+Milicia — Sci-Fi JARVIS GUI
 Tampilan holografik dengan visualizer arc JARVIS yang animasi
 sesuai status: idle, mendengarkan, atau berbicara.
 """
@@ -22,7 +22,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # Prevent multiple instances
 try:
     import ctypes as _ctypes
-    _hwnd = _ctypes.windll.user32.FindWindowW(None, "Milicia AI")
+    _hwnd = _ctypes.windll.user32.FindWindowW(None, "Milicia")
     if _hwnd:
         _ctypes.windll.user32.ShowWindow(_hwnd, 5)
         _ctypes.windll.user32.SetForegroundWindow(_hwnd)
@@ -84,7 +84,7 @@ ctk.set_default_color_theme("blue")
 # MAIN WINDOW
 # ─────────────────────────────────────────────
 window = ctk.CTk()
-window.title("Milicia AI")
+window.title("Milicia")
 window.geometry("1000x700")
 window.minsize(900, 620)
 window.resizable(True, True)
@@ -124,7 +124,7 @@ def hide_window():
         pystray.MenuItem('Tampilkan', show_window, default=True),
         pystray.MenuItem('Matikan Sepenuhnya', quit_app)
     )
-    tray_icon = pystray.Icon("milicia", image, "Milicia AI", menu)
+    tray_icon = pystray.Icon("milicia", image, "Milicia", menu)
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
 window.protocol('WM_DELETE_WINDOW', hide_window)
@@ -161,12 +161,7 @@ title_frame.pack(fill="x", pady=(0, 10))
 tk.Label(
     title_frame, text="MILICIA", bg=BG_COLOR, fg=ACCENT_CYAN,
     font=("Courier New", 22, "bold")
-).pack(side="left")
-
-tk.Label(
-    title_frame, text=" AI", bg=BG_COLOR, fg=ACCENT_GREEN,
-    font=("Courier New", 22, "bold")
-).pack(side="left")
+).pack()
 
 # ─────────────────────────────────────────────
 # JARVIS ARC VISUALIZER CANVAS

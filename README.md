@@ -1,4 +1,4 @@
-# 🧠 Milicia AI Assistant
+# 🧠 Milicia
 
 Milicia adalah **Asisten Virtual Pribadi** berbasis suara (Voice Assistant) yang digerakkan oleh **Kecerdasan Buatan Lokal (Local LLM)** menggunakan **Ollama**. 
 

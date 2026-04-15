@@ -1,4 +1,4 @@
-"""voice.py — Modul pengenalan suara untuk Milicia AI Assistant."""
+"""voice.py — Modul pengenalan suara untuk Milicia."""
 
 import speech_recognition as sr
 import threading
