@@ -36,7 +36,9 @@ def listen_and_process():
 def handle_voice_input():
     """Menangkap suara dari mikrofon, konversi ke teks, dan proses."""
     gui_state.is_processing = True
-    gui_state.status_var.set("🎙️ Mendengarkan...")
+    # Thread-safe: schedule UI update ke main thread
+    if gui_state.window:
+        gui_state.window.after(0, lambda: gui_state.status_var.set("🎙️ Mendengarkan..."))
     
     try:
         with sr.Microphone() as source:
@@ -44,7 +46,8 @@ def handle_voice_input():
             log_output("🎙️ Mendengarkan... (bicara sekarang)")
 
             audio = recognizer.listen(source, timeout=8, phrase_time_limit=15)
-            gui_state.status_var.set("🧠 Sedang memproses...")
+            if gui_state.window:
+                gui_state.window.after(0, lambda: gui_state.status_var.set("🧠 Sedang memproses..."))
             command = recognizer.recognize_google(audio, language='id-ID')
             log_output(f"🗣️ Rofid: {command}")
             run_command(command.lower())
@@ -63,7 +66,9 @@ def handle_voice_input():
         log_output(f"⚠️ Error: {e}")
     finally:
         gui_state.is_processing = False
-        gui_state.status_var.set("🔵 Siap mendengarkan...")
+        # Thread-safe: schedule UI update ke main thread
+        if gui_state.window:
+            gui_state.window.after(0, lambda: gui_state.status_var.set("🔵 Siap mendengarkan..."))
 
 
 # =============================================

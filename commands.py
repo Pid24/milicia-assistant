@@ -338,6 +338,21 @@ def run_command(command: str):
 
     try:
         ai_reply = ask_ai(command)
+
+        # Cek apakah Gemini meminta konfirmasi shutdown/restart via Tool Calling
+        if ai_reply.startswith("__CONFIRM_SHUTDOWN__|"):
+            ai_message = ai_reply.split("|", 1)[1] if "|" in ai_reply else ""
+            speak("Rofid, kamu yakin mau matikan komputer?")
+            if gui_state.window:
+                gui_state.window.after(0, _show_confirmation_dialog, "shutdown", ai_message)
+            return
+        if ai_reply.startswith("__CONFIRM_RESTART__|"):
+            ai_message = ai_reply.split("|", 1)[1] if "|" in ai_reply else ""
+            speak("Rofid, kamu yakin mau restart komputer?")
+            if gui_state.window:
+                gui_state.window.after(0, _show_confirmation_dialog, "restart", ai_message)
+            return
+
         speak(ai_reply)
     except Exception as e:
         speak(f"Maaf, terjadi kesalahan: {str(e)}")

@@ -438,15 +438,19 @@ def set_volume(level: int) -> str:
     """Mengatur volume sistem Windows."""
     try:
         import comtypes
-        from pycaw.pycaw import AudioUtilities
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
         # COM harus diinisialisasi di setiap thread yang menggunakannya
         comtypes.CoInitialize()
 
         try:
             devices = AudioUtilities.GetSpeakers()
-            # pycaw versi baru menggunakan property EndpointVolume
-            volume = devices.EndpointVolume
+            interface = devices.Activate(
+                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
+            )
+            volume = cast(interface, POINTER(IAudioEndpointVolume))
 
             # Konversi level (0-100) ke scalar (0.0-1.0)
             clamped = max(0, min(100, level))

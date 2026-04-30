@@ -119,6 +119,12 @@ gui_state.hard_quit = quit_app
 def hide_window():
     window.withdraw()
     global tray_icon
+    # Hentikan tray icon lama jika sudah ada, agar tidak menumpuk
+    if tray_icon is not None:
+        try:
+            tray_icon.stop()
+        except Exception:
+            pass
     image = create_tray_image()
     menu = (
         pystray.MenuItem('Tampilkan', show_window, default=True),
@@ -224,6 +230,14 @@ def _draw_arc_ring(cx, cy, r, start_ang, span, width, color, dash=None):
 
 def _update_visualizer():
     global _viz_angle, _viz_phase, _viz_bars
+
+    # Hemat CPU: jika window di-minimize ke tray, jangan render animasi berat
+    try:
+        if window.state() == 'withdrawn':
+            window.after(500, _update_visualizer)
+            return
+    except Exception:
+        pass
 
     # Determine current AI state
     speaking  = gui_state.is_speaking
@@ -732,7 +746,9 @@ def _process_text_command(text):
         run_command(text)
     finally:
         gui_state.is_processing = False
-        gui_state.status_var.set("STANDBY")
+        # Thread-safe: schedule UI update ke main thread
+        if gui_state.window:
+            gui_state.window.after(0, lambda: gui_state.status_var.set("STANDBY"))
 
 def _handle_submit(event=None):
     if gui_state.is_processing:
