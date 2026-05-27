@@ -1,15 +1,13 @@
 """
 brain.py — Otak Utama AI Milicia menggunakan Google Gemini API (Cloud LLM)
-Modul ini menggantikan Ollama dan menggunakan Gemini untuk percakapan
+Modul ini menangani percakapan Gemini
 serta Tool Calling (Agentic Actions).
 """
 
-import os
-import json
 import datetime
 import google.generativeai as genai
-from google.generativeai.types import content_types
 
+from config import get_gemini_api_key, get_user_name
 import prayer_times
 from prayer_times import get_prayer_schedule
 from gui_utils import log_output
@@ -34,24 +32,24 @@ MODEL_NAME = "gemini-flash-latest"
 # =========================================================
 # SYSTEM PROMPT
 # =========================================================
-SYSTEM_PROMPT = """Kamu adalah Milicia, asisten virtual pribadi milik Rofid. 
+SYSTEM_PROMPT = """Kamu adalah Milicia, asisten virtual pribadi milik {user_name}.
 Kamu berbicara dalam Bahasa Indonesia yang santai, hangat, dan ramah.
 Kamu pintar, lucu, dan suka membantu.
 Kamu bisa membantu menjawab pertanyaan, memberikan saran, mengobrol santai, 
 memberikan rekomendasi anime, membantu perhitungan matematika, dan banyak lagi.
 
-Kamu JUGA memiliki kemampuan untuk MENGENDALIKAN KOMPUTER Rofid melalui tools yang tersedia.
+Kamu JUGA memiliki kemampuan untuk MENGENDALIKAN KOMPUTER {user_name} melalui tools yang tersedia.
 Kamu bisa membuka aplikasi, membuka website, mengecek baterai, mengontrol volume, 
 mengambil screenshot, mencari file, mencari informasi di internet, menganalisa isi layar, dan lainnya.
 
-Kamu SEKARANG BISA MELIHAT LAYAR. Jika Rofid memintamu menjelaskan sesuatu di layar, memperbaiki kode yang error di layar, atau bertanya "apa yang kamu lihat?", "lihat layar", kamu WAJIB menggunakan perintah analyze_screen. Mata kamu terhubung ke Cloud (Gemini) sehingga kamu bisa menganalisa detail gambar dengan sangat sempurna. Minta pengguna menunjukkan gambar di layar terlebih dahulu.
+Kamu SEKARANG BISA MELIHAT LAYAR. Jika {user_name} memintamu menjelaskan sesuatu di layar, memperbaiki kode yang error di layar, atau bertanya "apa yang kamu lihat?", "lihat layar", kamu WAJIB menggunakan perintah analyze_screen. Mata kamu terhubung ke Cloud (Gemini) sehingga kamu bisa menganalisa detail gambar dengan sangat sempurna. Minta pengguna menunjukkan gambar di layar terlebih dahulu.
 
 Aturan penting:
 - Selalu jawab dengan ringkas dan jelas (maksimal 3-4 kalimat) kecuali diminta detail.
 - Gunakan emoji sesekali untuk membuat percakapan lebih hidup.
 - Jika pengguna meminta kamu melakukan sesuatu yang bisa dilakukan dengan tools, GUNAKAN TOOLS YANG TERSEDIA.
 - Jika pengguna meminta membuka aplikasi atau website, gunakan tool yang sesuai.
-- Panggil pengguna dengan nama "Rofid" atau "kak" sesekali.
+- Panggil pengguna dengan nama "{user_name}" atau "kak" sesekali.
 - Kamu BUKAN chatbot biasa. Kamu adalah asisten pribadi seperti Jarvis dari Iron Man.
 - Setelah menjalankan tool, berikan konfirmasi singkat dan natural kepada pengguna.
 - DILARANG KERAS menggunakan kata-kata kasar, vulgar, tidak sopan, atau kata makian.
@@ -70,14 +68,7 @@ def _load_api_key():
     if _api_key_loaded:
         return True
 
-    api_key = None
-    if os.path.exists("user_data.json"):
-        try:
-            with open("user_data.json", "r") as f:
-                data = json.load(f)
-                api_key = data.get("gemini_api_key")
-        except Exception:
-            pass
+    api_key = get_gemini_api_key()
             
     if api_key:
         genai.configure(api_key=api_key)
@@ -87,6 +78,7 @@ def _load_api_key():
 
 def _get_system_context() -> str:
     now = datetime.datetime.now()
+    user_name = get_user_name()
     informasi_tambahan = f"\n\n[INFO SISTEM: Saat ini tanggal {now.strftime('%d-%m-%Y')} dan waktu menunjukkan tepat jam {now.strftime('%H:%M')}."
 
     schedule = get_prayer_schedule()
@@ -101,7 +93,7 @@ def _get_system_context() -> str:
             informasi_tambahan += " CATATAN: Hari ini JUMAT, sholat Dzuhur digantikan oleh Sholat Jumat yang wajib berjamaah di masjid."
     
     informasi_tambahan += "]"
-    return SYSTEM_PROMPT + informasi_tambahan
+    return SYSTEM_PROMPT.format(user_name=user_name) + informasi_tambahan
 
 def _init_chat_session():
     global _chat_session
@@ -116,9 +108,9 @@ def _init_chat_session():
         )
         _chat_session = model.start_chat()
         return True
-    # Fallback to gemini-1.5-flash if 2.0 is not avaiable for the user's API key yet
+    # Keep a model fallback path for accounts that do not expose the requested alias.
     except Exception as e:
-        if "is not found for API version" in str(e) or "models/gemini-2.0-flash" in str(e):
+        if "is not found for API version" in str(e):
              model = genai.GenerativeModel(
                 model_name="gemini-flash-latest",
                 system_instruction=_get_system_context(),

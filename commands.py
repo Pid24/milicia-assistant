@@ -17,6 +17,7 @@ from utils import speak, speak_natural
 from gui_utils import log_output
 from gui_state import window
 import gui_state
+from config import get_user_name
 from brain import ask_ai, ask_ai_simple, ask_ai_detailed, add_to_history
 from actions import (
     open_website, open_application, shutdown_computer, restart_computer,
@@ -36,8 +37,9 @@ def sleep_mode():
 
 
 def exit_app():
+    user_name = get_user_name()
     speak_natural([
-        "Sampai jumpa Rofid! Milicia pamit dulu.",
+        f"Sampai jumpa {user_name}! Milicia pamit dulu.",
         "Oke, sampai ketemu lagi ya!",
         "Terima kasih, aku istirahat dulu."
     ])
@@ -47,7 +49,7 @@ def exit_app():
         window.destroy()
 
 
-# Perintah kritis yang TIDAK memerlukan AI (harus berjalan meskipun Ollama offline)
+# Perintah kritis yang TIDAK memerlukan AI (harus berjalan meskipun Gemini offline)
 CRITICAL_COMMANDS = {
     "keluar": exit_app,
     "exit": exit_app,
@@ -289,7 +291,7 @@ def run_command(command: str):
     """
     command_lower = command.lower().strip()
 
-    # STEP 1: Cek perintah kritis (harus bisa jalan tanpa Ollama)
+    # STEP 1: Cek perintah kritis (harus bisa jalan tanpa Gemini)
     for keyword, action in CRITICAL_COMMANDS.items():
         if keyword in command_lower:
             action()
@@ -303,13 +305,13 @@ def run_command(command: str):
 
         # Handle aksi yang butuh konfirmasi GUI
         if result == "__CONFIRM_SHUTDOWN__":
-            speak("Rofid, kamu yakin mau matikan komputer?")
+            speak(f"{get_user_name()}, kamu yakin mau matikan komputer?")
             if gui_state.window:
                 gui_state.window.after(0, _show_confirmation_dialog, "shutdown", "")
             return
 
         if result == "__CONFIRM_RESTART__":
-            speak("Rofid, kamu yakin mau restart komputer?")
+            speak(f"{get_user_name()}, kamu yakin mau restart komputer?")
             if gui_state.window:
                 gui_state.window.after(0, _show_confirmation_dialog, "restart", "")
             return
@@ -342,13 +344,13 @@ def run_command(command: str):
         # Cek apakah Gemini meminta konfirmasi shutdown/restart via Tool Calling
         if ai_reply.startswith("__CONFIRM_SHUTDOWN__|"):
             ai_message = ai_reply.split("|", 1)[1] if "|" in ai_reply else ""
-            speak("Rofid, kamu yakin mau matikan komputer?")
+            speak(f"{get_user_name()}, kamu yakin mau matikan komputer?")
             if gui_state.window:
                 gui_state.window.after(0, _show_confirmation_dialog, "shutdown", ai_message)
             return
         if ai_reply.startswith("__CONFIRM_RESTART__|"):
             ai_message = ai_reply.split("|", 1)[1] if "|" in ai_reply else ""
-            speak("Rofid, kamu yakin mau restart komputer?")
+            speak(f"{get_user_name()}, kamu yakin mau restart komputer?")
             if gui_state.window:
                 gui_state.window.after(0, _show_confirmation_dialog, "restart", ai_message)
             return

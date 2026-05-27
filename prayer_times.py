@@ -2,6 +2,7 @@ import threading
 import time
 import requests
 import datetime
+from config import get_user_name
 from utils import speak
 from gui_utils import log_output
 
@@ -137,7 +138,7 @@ def prayer_time_daemon():
             jumat_reminder = _get_jumat_reminder_time()
             if jumat_reminder and current_hm == jumat_reminder:
                 speak(
-                    f"Assalamu'alaikum Rofid! Sebentar lagi masuk waktu Sholat Jumat "
+                    f"Assalamu'alaikum {get_user_name()}! Sebentar lagi masuk waktu Sholat Jumat "
                     f"untuk wilayah {city} dan sekitarnya. "
                     f"Yuk segera bersiap-siap berangkat ke masjid. "
                     f"Jangan lupa mandi, pakai baju rapi, dan berangkat lebih awal ya!"
@@ -150,13 +151,13 @@ def prayer_time_daemon():
                 # Pada hari Jumat, Dzuhur diganti dengan pesan Jumat
                 if is_jumat and sholat == "Dzuhur":
                     speak(
-                        f"Rofid, sudah masuk waktu Sholat Jumat untuk wilayah {city} "
+                        f"{get_user_name()}, sudah masuk waktu Sholat Jumat untuk wilayah {city} "
                         f"dan sekitarnya. Semoga khutbah dan sholatnya khusyuk!"
                     )
                     notified_prayers.add(sholat)
                 else:
                     speak(
-                        f"Rofid, sudah masuk waktu sholat {sholat} untuk wilayah {city} "
+                        f"{get_user_name()}, sudah masuk waktu sholat {sholat} untuk wilayah {city} "
                         f"dan sekitarnya. Jangan lupa untuk sholat."
                     )
                     notified_prayers.add(sholat)

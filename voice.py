@@ -10,6 +10,8 @@ import time
 import json
 import vosk
 import pyaudio
+from config import get_user_name
+from local_stt import LocalSTTUnavailable, transcribe_audio
 
 recognizer = sr.Recognizer()
 
@@ -23,6 +25,22 @@ def init_calibration():
         pass
 
 threading.Thread(target=init_calibration, daemon=True).start()
+
+
+def _recognize_command(audio) -> str:
+    """Prefer local Whisper STT, then fallback to Google STT."""
+    try:
+        command = transcribe_audio(audio, language="id")
+        if command:
+            return command
+        raise sr.UnknownValueError()
+    except LocalSTTUnavailable as e:
+        log_output(f"Local STT tidak tersedia: {e}. Fallback ke Google STT.")
+    except Exception as e:
+        log_output(f"Local STT gagal: {e}. Fallback ke Google STT.")
+
+    return recognizer.recognize_google(audio, language='id-ID')
+
 
 def listen_and_process():
     """Memulai thread baru untuk menangkap input suara."""
@@ -48,8 +66,8 @@ def handle_voice_input():
             audio = recognizer.listen(source, timeout=8, phrase_time_limit=15)
             if gui_state.window:
                 gui_state.window.after(0, lambda: gui_state.status_var.set("🧠 Sedang memproses..."))
-            command = recognizer.recognize_google(audio, language='id-ID')
-            log_output(f"🗣️ Rofid: {command}")
+            command = _recognize_command(audio)
+            log_output(f"🗣️ {get_user_name()}: {command}")
             run_command(command.lower())
 
     except sr.WaitTimeoutError:
@@ -174,7 +192,7 @@ def _wake_word_loop():
                         pa = None
                         
                         # Respons ke user
-                        speak("Ya Rofid?")
+                        speak(f"Ya {get_user_name()}?")
                         
                         # Tunggu sebentar agar speak selesai
                         time.sleep(0.3)
@@ -201,7 +219,7 @@ def _wake_word_loop():
                         pa.terminate()
                         pa = None
                         
-                        speak("Ya Rofid?")
+                        speak(f"Ya {get_user_name()}?")
                         time.sleep(0.3)
                         listen_and_process()
                         

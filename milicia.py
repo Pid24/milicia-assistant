@@ -5,7 +5,6 @@ sesuai status: idle, mendengarkan, atau berbicara.
 """
 
 import customtkinter as ctk
-import json
 import math
 import os
 import random
@@ -31,31 +30,10 @@ except Exception:
     pass
 
 import gui_state
-from brain import is_ai_running, reset_history
+from config import get_user_name
+from brain import MODEL_NAME, is_ai_running, reset_history
 from utils import speak, get_time_greeting
 
-USER_DATA_FILE = "user_data.json"
-
-def get_user_name():
-    if os.path.exists(USER_DATA_FILE):
-        with open(USER_DATA_FILE, "r") as f:
-            data = json.load(f)
-            return data.get("name", "pengguna")
-    return "pengguna"
-
-def set_user_name(name):
-    data = {}
-    if os.path.exists(USER_DATA_FILE):
-        with open(USER_DATA_FILE, "r") as f:
-            try:
-                data = json.load(f)
-            except json.JSONDecodeError:
-                pass
-    data["name"] = name
-    with open(USER_DATA_FILE, "w") as f:
-        json.dump(data, f)
-
-set_user_name("Rofid")
 user = get_user_name()
 
 # ─────────────────────────────────────────────
@@ -437,7 +415,7 @@ tk.Label(
 
 tk.Label(
     badge_frame,
-    text="⚡ gemini-2.0-flash",
+    text=f"⚡ {MODEL_NAME}",
     bg=BG_COLOR, fg=TEXT_MUTED,
     font=("Courier New", 9)
 ).pack(side="right", padx=4)
@@ -759,7 +737,7 @@ def _handle_submit(event=None):
     text_input.delete(0, "end")
     gui_state.is_processing = True
     gui_state.status_var.set("PROCESSING...")
-    log_output(f"⌨️ Rofid: {text}")
+    log_output(f"⌨️ {user}: {text}")
     threading.Thread(target=_process_text_command, args=(text,), daemon=True).start()
 
 text_input.bind("<Return>", _handle_submit)

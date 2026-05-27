@@ -2,7 +2,7 @@
 actions.py — Kemampuan Fisik Milicia (Agentic Actions)
 Modul ini berisi semua aksi nyata yang bisa dilakukan Milicia di komputer.
 Setiap fungsi menjalankan satu aksi dan mengembalikan string hasil.
-Ollama akan memanggil fungsi-fungsi ini melalui mekanisme Tool Calling.
+Gemini akan memanggil fungsi-fungsi ini melalui mekanisme Tool Calling.
 """
 
 import os
@@ -21,7 +21,7 @@ from gui_utils import log_output
 
 
 # =========================================================
-# TOOL DEFINITIONS — Schema JSON untuk Ollama API
+# TOOL DEFINITIONS — Schema JSON untuk LLM tool calling
 # =========================================================
 
 TOOL_DEFINITIONS = [
@@ -397,7 +397,7 @@ def open_application(app_name: str) -> str:
 def shutdown_computer() -> str:
     """
     Mematikan komputer. Membutuhkan konfirmasi GUI.
-    Return string untuk memberitahu Ollama bahwa konfirmasi sedang ditunggu.
+    Return string untuk memberitahu brain bahwa konfirmasi sedang ditunggu.
     """
     log_output("⚠️ Permintaan SHUTDOWN diterima — menunggu konfirmasi pengguna...")
     return "__CONFIRM_SHUTDOWN__"
@@ -406,7 +406,7 @@ def shutdown_computer() -> str:
 def restart_computer() -> str:
     """
     Me-restart komputer. Membutuhkan konfirmasi GUI.
-    Return string untuk memberitahu Ollama bahwa konfirmasi sedang ditunggu.
+    Return string untuk memberitahu brain bahwa konfirmasi sedang ditunggu.
     """
     log_output("⚠️ Permintaan RESTART diterima — menunggu konfirmasi pengguna...")
     return "__CONFIRM_RESTART__"
@@ -942,7 +942,7 @@ ACTION_MAP = {
 def execute_action(function_name: str, arguments: dict) -> str:
     """
     Dispatcher utama: Menjalankan aksi berdasarkan nama fungsi dan argumen
-    yang diberikan oleh Ollama tool_calls.
+    yang diberikan oleh LLM tool calls.
     Returns: String hasil eksekusi.
     """
     action_fn = ACTION_MAP.get(function_name)
